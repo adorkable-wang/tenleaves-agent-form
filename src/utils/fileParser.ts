@@ -1,5 +1,12 @@
+/**
+ * 浏览器端文件解析（中文注释版）
+ *
+ * 作用：将上传的 Word/Excel/纯文本/Markdown/JSON 等文件转换成 AgentDocument，
+ * 统一交给后端智能体进行分析。
+ */
 import type { AgentDocument } from '../agent'
 
+// 不支持的文件类型
 export class UnsupportedFileError extends Error {
   constructor(message: string) {
     super(message)
@@ -7,6 +14,7 @@ export class UnsupportedFileError extends Error {
   }
 }
 
+// 空文件错误
 export class EmptyFileError extends Error {
   constructor(message: string) {
     super(message)
@@ -99,6 +107,12 @@ export const ACCEPT_ATTRIBUTE_VALUE = ACCEPTED_FILE_EXTENSIONS.join(',')
 export const SUPPORTED_FORMAT_LABEL =
   'TXT、Markdown、JSON、CSV、YAML、LOG、Word (DOCX)、Excel (XLSX)'
 
+/**
+ * parseFileToAgentDocument
+ * - 根据扩展名/MIME 类型判断文件类别
+ * - Word 使用 mammoth 提取文本
+ * - Excel 使用 xlsx 逐表转为 TSV 文本
+ */
 export async function parseFileToAgentDocument(
   file: File
 ): Promise<ParsedAgentDocument> {
@@ -201,6 +215,7 @@ function extensionToLabel(extension: string | null, fallback: string): string {
   return `${extension.toUpperCase()} 文件`
 }
 
+// Word（DOCX）提取：浏览器版 mammoth
 async function extractTextFromDocx(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer()
   const mammoth = await import('mammoth/mammoth.browser')
@@ -208,6 +223,7 @@ async function extractTextFromDocx(file: File): Promise<string> {
   return result.value
 }
 
+// Excel 提取：遍历 sheet 输出为制表符分隔的文本
 async function extractTextFromExcel(
   file: File,
   extension: string | null

@@ -1,0 +1,33 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationMap": true,
+    "outDir": "dist-lib/types",
+    "jsx": "react-jsx",
+    "skipLibCheck": true,
+    "strict": true,
+    "types": ["vite/client"]
+  },
+  "include": [
+    "src/lib/index.ts",
+    "src/lib/client.ts",
+    "src/agent/**/*.ts",
+    "src/schema/**/*.ts",
+    "src/utils/fileParser.ts",
+    "src/types/**/*.d.ts"
+  ],
+  "exclude": [
+    "server/**",
+    "src/main.tsx",
+    "src/App.tsx",
+    "dist/**",
+    "dist-lib/**",
+    "node_modules/**"
+  ]
+}

@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:types": "tsc -p tsconfig.lib.json",
+    "build:lib": "vite build -c vite.lib.config.ts",
+    "build:pkg": "pnpm run build:types && pnpm run build:lib",
     "lint": "eslint .",
     "preview": "vite preview",
     "agent:server": "tsx server/agentServer.ts"
@@ -28,6 +31,7 @@
     "@types/node-fetch": "^2.6.13",
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
+    "@unocss/reset": "^66.5.4",
     "@vitejs/plugin-react-swc": "^4.1.0",
     "eslint": "^9.36.0",
     "eslint-plugin-react-hooks": "^5.2.0",
@@ -36,6 +40,21 @@
     "tsx": "^4.19.2",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.45.0",
+    "unocss": "^66.5.4",
     "vite": "^7.1.7"
+  },
+  "main": "dist-lib/tenleaves-agent-form.cjs",
+  "module": "dist-lib/tenleaves-agent-form.es.js",
+  "types": "dist-lib/types/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "dist-lib"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist-lib/types/index.d.ts",
+      "import": "./dist-lib/tenleaves-agent-form.es.js",
+      "require": "./dist-lib/tenleaves-agent-form.cjs"
+    }
   }
 }

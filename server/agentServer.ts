@@ -1,3 +1,11 @@
+/**
+ * Agent Server（服务端）中文注释版
+ *
+ * 作用：
+ *  - 暴露 POST /api/agent/analyze 接口
+ *  - 接收 { document, options }，构造提示词与 JSON Schema，调用 DashScope（或其他大模型）
+ *  - 解析并“归一化”模型返回，产出前端可用的 AgentAnalyzeResult 结构
+ */
 import 'dotenv/config'
 import express from 'express'
 import type { Request, Response } from 'express'
@@ -13,6 +21,7 @@ import type {
   AgentFormField,
 } from '../src/agent'
 
+// 读取环境变量与默认配置
 const PORT = Number(process.env.PORT ?? 8787)
 const DASHSCOPE_ENDPOINT =
   process.env.DASHSCOPE_ENDPOINT ??
@@ -20,6 +29,7 @@ const DASHSCOPE_ENDPOINT =
 const DASHSCOPE_MODEL = process.env.DASHSCOPE_MODEL ?? 'qwen-plus'
 const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY
 
+// 必要的密钥检查
 if (!DASHSCOPE_API_KEY) {
   throw new Error('缺少 DASHSCOPE_API_KEY，请在 .env 中配置')
 }
@@ -28,6 +38,7 @@ const app = express()
 app.use(cors())
 app.use(express.json({ limit: '5mb' }))
 
+// 主入口：POST /api/agent/analyze
 app.post(
   '/api/agent/analyze',
   async (
@@ -45,7 +56,7 @@ app.post(
         options.formSchema,
         options.instructions
       )
-      const dashscopePayload = buildDashscopePayload(prompt)
+      const dashscopePayload = buildDashscopePayload(prompt) // 构造请求体（含 JSON Schema）
       const response = await fetch(DASHSCOPE_ENDPOINT, {
         method: 'POST',
         headers: {
@@ -63,9 +74,9 @@ app.post(
       }
 
       const data = (await response.json()) as DashscopeResponse
-      const rawContent = data.choices?.[0]?.message?.content
-      const payload = extractPayload(rawContent, options.formSchema)
-      const normalized = normalizeAgentResult(payload, options.formSchema)
+      const rawContent = data.choices?.[0]?.message?.content // 可能是 字符串/数组/对象
+      const payload = extractPayload(rawContent, options.formSchema) // 提取“有效载荷”
+      const normalized = normalizeAgentResult(payload, options.formSchema) // 归一化为 AgentAnalyzeResult
       res.json(normalized)
     } catch (error) {
       console.error(error)
@@ -76,10 +87,14 @@ app.post(
   }
 )
 
+// 启动 HTTP 服务器
 app.listen(PORT, () => {
   console.log(`[agent-server] listening on http://localhost:${PORT}`)
 })
 
+/**
+ * 构造 DashScope 请求体（指定模型 + JSON Schema 强约束）
+ */
 function buildDashscopePayload(
   prompt: string
 ): DashscopePayload {
@@ -106,6 +121,11 @@ function buildDashscopePayload(
   }
 }
 
+/**
+ * 构造提示词：
+ * - 合成表单字段及其同义词/描述
+ * - 附带用户文档文本
+ */
 function buildPrompt(
   document: AgentDocument,
   fields: AgentFormField[],

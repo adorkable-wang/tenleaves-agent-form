@@ -20,7 +20,7 @@ Open http://localhost:5173 to try the demo. Upload 一个 `.txt`、`.md`、`.jso
 
 ### Customising the form schema
 
-Update the `formSchema` array in `src/App.tsx` to add/remove fields, tweak synonyms, or extend hints. The schema is passed directly to the agent so the heuristics know which values to look for.
+Update the `formSchema` array in `src/schema/formSchema.ts` to add/remove fields, tweak synonyms, or extend hints. The schema is passed directly to the agent so the heuristics know which values to look for.
 
 ## 接入真实 LLM 后端
 
@@ -42,15 +42,38 @@ pnpm agent:server
 
 > ⚠️ 不要在浏览器端保存 API Key。确保所有模型调用都走服务端或受控网关。
 
-## Packaging the agent for reuse
+## Packaging the agent for reuse (npm-ready)
 
-The folder structure already isolates the reusable logic:
+This repo now exposes a public entry under `src/lib/index.ts` to ease npm packaging.
 
-1. Copy `src/agent/` into a new package (e.g. `packages/document-agent`) or move it into a dedicated repository.
-2. Create an `index.ts` entry point that re-exports the interfaces and backends you want to share—`AgentRunner`, `AgentBackend`, `AgentFormField`, etc.
-3. Add build tooling (`tsup`, `rollup`, or plain `tsc`) and set up `package.json` exports for ESM/CJS consumers.
-4. Publish the package to npm, then depend on it from other projects: `pnpm add @your-scope/document-agent`.
-5. Applications can now import the package and focus purely on UI or orchestration, while the shared agent logic handles file analysis.
+What you can import:
+
+- Types and backends from `src/agent` (re-exported): `Agent*` types, `createRemoteAgentRunner`, `analyzeDocumentWithDefaultAgent`.
+- Client helper: `createAgentClient({ endpoint, apiKey })` → returns `{ analyze(document, options) }`.
+- Schema utilities: `formSchema`, `createInitialFormValues(schema)`.
+- File parsing utils (browser): `parseFileToAgentDocument(file)`, `ACCEPT_ATTRIBUTE_VALUE`, `SUPPORTED_FORMAT_LABEL` and related error classes.
+
+Quick example:
+
+```ts
+import {
+  createAgentClient,
+  formSchema,
+  createInitialFormValues,
+  parseFileToAgentDocument,
+} from './src/lib'
+
+const client = createAgentClient({ endpoint: '/api/agent/analyze' })
+
+async function handle(file: File) {
+  const parsed = await parseFileToAgentDocument(file)
+  const result = await client.analyze(parsed.document, { formSchema })
+  const initial = createInitialFormValues(formSchema)
+  // merge result into your form based on your UI logic
+}
+```
+
+When publishing, use `src/lib/index.ts` as the package entry and set up a build with `tsup`, `rollup`, or `vite build --lib`.
 
 ## Suggested next steps
 
