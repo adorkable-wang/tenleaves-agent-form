@@ -8,11 +8,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AgentAnalyzeResult, AgentFormField } from "../agent";
-import {
-  analyzeDocumentWithDefaultAgent,
-  type AgentFieldGroup,
-} from "../agent";
-import { parseFileToAgentDocument } from "../utils/fileParser";
+import { analyzeDocumentWithDefaultAgent } from "../agent";
+import { parseFileToAgentDocument, ACCEPTED_FILE_EXTENSIONS, ACCEPT_ATTRIBUTE_VALUE, SUPPORTED_FORMAT_LABEL } from "../utils/fileParser";
+import { chooseInitialValuesFromResult, emitAutofillEvent } from "../agent/utils";
 
 // 聊天消息结构（包含时间戳，便于显示发送时间）
 type ChatMsg = {
@@ -68,25 +66,8 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
     ]);
   };
 
-  const computeFillValues = useCallback(
-    (result: AgentAnalyzeResult): Record<string, string> => {
-      const values: Record<string, string> = {};
-      const primaryGroup: AgentFieldGroup | null = result.fieldGroups?.length
-        ? [...result.fieldGroups].sort(
-            (a, b) => (b.confidence ?? 0) - (a.confidence ?? 0)
-          )[0]
-        : null;
-      if (primaryGroup) {
-        Object.entries(primaryGroup.fields).forEach(([fieldId, option]) => {
-          if (option.value) values[fieldId] = option.value;
-        });
-      }
-      for (const field of result.fields) {
-        const v = field.value ?? field.options?.[0]?.value;
-        if (v && !values[field.fieldId]) values[field.fieldId] = v;
-      }
-      return values;
-    },
+  const computeInitialFillValuesFromResult = useCallback(
+    (result: AgentAnalyzeResult) => chooseInitialValuesFromResult(result),
     []
   );
 
@@ -118,7 +99,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
       const result = await analyzeDocumentWithDefaultAgent(docPayload, {
         formSchema: schema,
       });
-      const values = computeFillValues(result);
+      const values = computeInitialFillValuesFromResult(result);
       onApply(values, result);
       // 表单联动：高亮已填充的表单字段，并派发自定义事件
       try {
@@ -134,11 +115,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
             }, 1200);
           }
         }
-        window.document.dispatchEvent(
-          new CustomEvent("agent:autofill", {
-            detail: { values, backend: result.backend },
-          })
-        );
+        emitAutofillEvent(values, result.backend)
       } catch {
         /* empty */
       }
@@ -153,7 +130,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
     } finally {
       setPending(false);
     }
-  }, [inputText, schema, computeFillValues, onApply, pendingFile]);
+  }, [inputText, schema, computeInitialFillValuesFromResult, onApply, pendingFile]);
 
   const buttonLabel = useMemo(() => (open ? "关闭助手" : "打开助手"), [open]);
 
@@ -235,29 +212,21 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
 
   // 校验与选择文件（类型/大小）
   const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
-  const ACCEPT_EXTS = [
-    "txt",
-    "text",
-    "md",
-    "markdown",
-    "json",
-    "csv",
-    "tsv",
-    "yaml",
-    "yml",
-    "docx",
-    "xlsx",
-    "xls",
-    "xlsm",
-    "xlsb",
-    "ods",
-  ];
+  // 统一通过文件解析工具导出的可接受扩展名，避免在多处维护
+  const ACCEPT_EXTS_SET = useMemo(() => {
+    const set = new Set<string>();
+    for (const ext of ACCEPTED_FILE_EXTENSIONS) {
+      const cleaned = ext.startsWith('.') ? ext.slice(1) : ext;
+      set.add(cleaned.toLowerCase());
+    }
+    return set;
+  }, []);
   const isAcceptExt = (name: string) => {
     const lower = name.toLowerCase();
-    const idx = lower.lastIndexOf(".");
-    if (idx === -1) return false;
-    const ext = lower.slice(idx + 1);
-    return ACCEPT_EXTS.includes(ext);
+    const idx = lower.lastIndexOf('.')
+    if (idx === -1) return false
+    const ext = lower.slice(idx + 1)
+    return ACCEPT_EXTS_SET.has(ext)
   };
   const handleSelectFile = (file: File) => {
     if (file.size > MAX_FILE_BYTES) {
@@ -270,7 +239,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
     }
     if (!isAcceptExt(file.name)) {
       setError(
-        "不支持的文件类型，请上传常见文本/办公文档（TXT/MD/JSON/CSV/YAML/DOCX/XLSX 等）。"
+        `不支持的文件类型，请上传常见文本/办公文档（${SUPPORTED_FORMAT_LABEL}）。`
       );
       return;
     }
@@ -363,6 +332,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                       ? "ring-3 ring-indigo-400/45 border-indigo-400/60"
                       : ""
                   }`}
+                  aria-busy={pending}
                 >
                   <button
                     type="button"
@@ -399,6 +369,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                     ref={fileInputRef}
                     type="file"
                     className="hidden"
+                    accept={ACCEPT_ATTRIBUTE_VALUE}
                     onChange={(e) => {
                       const f = e.target.files?.[0];
                       if (f) handleSelectFile(f);

@@ -6,16 +6,15 @@
  * - 右下角悬浮助手（FloatingAssistant）：支持文本/文件输入，提交后调用智能体并回填表单
  * - 首次获得分析结果时，自动应用“最高置信度组合 + 字段主值/候选首值”初始化表单
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type AgentAnalyzeResult, type AgentFieldOption } from "./agent";
-import { useAgentAnalysis } from "./hooks/useAgentAnalysis";
+import { chooseInitialValuesFromResult } from './agent/utils'
 // 悬浮窗聊天助手
 import FloatingAssistant from "./components/FloatingAssistant";
 import AutofillForm from "./components/AutofillForm";
 import { SUPPORTED_FORMAT_LABEL } from "./utils/fileParser";
 import { formSchema } from "./schema/formSchema";
 // 样式由 UnoCSS shortcuts 提供
-// 状态标签由 AnalysisStatus 内部处理（本页未直接使用）
 
 // 表单字段定义已抽出至 ./schema/formSchema
 
@@ -28,10 +27,7 @@ function App() {
   );
   const [analysisResult, setAnalysisResult] = useState<AgentAnalyzeResult | null>(null);
   // 保留文件名状态以备扩展，当前未使用
-  const {
-    status,
-    reset: resetAnalysis,
-  } = useAgentAnalysis();
+  // 已不使用 useAgentAnalysis，悬浮助手内部独立管理上传/分析
 
   // 页面主区域仅展示表单，由悬浮助手触发分析与填充
 
@@ -68,6 +64,7 @@ function App() {
   // 控制台打印识别详情（便于开发调试）
   useEffect(() => {
     if (!analysisResult) return;
+    if (!import.meta.env.DEV) return;
 
     const printableFields = analysisResult.fields.map((field) => ({
       字段编号: field.fieldId,
@@ -102,38 +99,29 @@ function App() {
 
   // 输入变更逻辑已由 AutofillForm 组件通过 onChange 直接处理
 
-  // 当新的分析结果可用时初始化表单值（仅一次）
+  // 当新的分析结果可用时初始化表单值（每份结果仅初始化一次，防止循环）
+  const lastInitializedRef = useRef<AgentAnalyzeResult | null>(null)
   useEffect(() => {
     if (!analysisResult) return
+    // 若本次结果已初始化过，直接退出
+    if (lastInitializedRef.current === analysisResult) return
+
+    // 仅当表单当前全部为空时才进行初始化，避免覆盖用户已编辑内容
     const allEmpty = Object.values(formValues).every((v) => !v)
     if (!allEmpty) return
 
-    const primaryGroup = analysisResult.fieldGroups?.length
-      ? [...analysisResult.fieldGroups].sort(
-          (a, b) => (b.confidence ?? 0) - (a.confidence ?? 0)
-        )[0]
-      : null
-
-    setFormValues((prev) => {
-      const base = { ...prev }
-      if (primaryGroup && Object.keys(primaryGroup.fields).length) {
-        Object.entries(primaryGroup.fields).forEach(([fieldId, option]) => {
-          if (option.value) base[fieldId] = option.value
-        })
-      }
-      for (const field of analysisResult.fields ?? []) {
-        const primaryValue = field.value ?? field.options?.[0]?.value
-        if (primaryValue && !base[field.fieldId]) base[field.fieldId] = primaryValue
-      }
-      return base
-    })
-  }, [analysisResult, formValues])
+    setFormValues((prev) => ({ ...prev, ...chooseInitialValuesFromResult(analysisResult) }))
+    // 记录已对该份结果做过初始化
+    lastInitializedRef.current = analysisResult
+    // 仅依赖 analysisResult（避免 setFormValues -> formValues 变化导致的重复触发）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisResult])
 
   // 重置表单并清理状态
   const resetForm = useCallback(() => {
     setFormValues(createInitialFormValues(formSchema));
-    resetAnalysis();
-  }, [resetAnalysis]);
+    setAnalysisResult(null);
+  }, []);
 
   // 由悬浮窗直接回填表单，无需字段候选/动作面板点击
 
@@ -158,7 +146,7 @@ function App() {
             schema={formSchema}
             values={formValues}
             suggestions={fieldOptionsMap}
-            disabled={status === "loading"}
+            disabled={false}
             onChange={(fieldId, value) => setFormValues((prev) => ({ ...prev, [fieldId]: value }))}
           />
         </section>

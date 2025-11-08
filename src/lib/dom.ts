@@ -365,7 +365,10 @@ export function buildUniqueSelector(el: Element): string {
   }
   const parts: string[] = []
   let node: Element | null = el
+  let depth = 0
   while (node && node.nodeType === 1 && node !== document.body) {
+    depth++
+    if (depth > 6) break // 限制最大层级，避免选择器过长
     const parentEl: Element | null = node.parentElement
     if (!parentEl) break
     const tag = node.tagName.toLowerCase()
