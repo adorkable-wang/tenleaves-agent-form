@@ -33,6 +33,7 @@ export const AutofillForm: React.FC<Props> = ({
             onChange(field.id, e.target.value),
           placeholder: field.description,
           disabled,
+          'aria-describedby': field.description ? `${field.id}-hint` : undefined,
         }
         const options = suggestions[field.id] ?? []
         return (
@@ -63,7 +64,7 @@ export const AutofillForm: React.FC<Props> = ({
                 })}
               </div>
             ) : null}
-            {field.description && <span className="field-hint">{field.description}</span>}
+            {field.description && <span id={`${field.id}-hint`} className="field-hint">{field.description}</span>}
           </div>
         )
       })}
