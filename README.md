@@ -1,59 +1,72 @@
-# Document-aware Agent Form
+# 文档智能填表（React + TS + Vite）
 
-This project demonstrates how to integrate an agent workflow inside a React + TypeScript + Vite application. Users can upload a document, let the agent reason about the content, and review an auto-filled form populated from the results. The agent layer lives in `src/agent/` and is designed so it can be extracted into its own npm package later.
+该项目演示“上传文档 → 大模型抽取 → 自动填表”的完整链路。前端只呈现“表单 + 右下角悬浮智能助手”，上传文本/Word/Excel 等文档即可识别并回填。
 
-## Getting started
+## 快速开始
 
 ```bash
 pnpm install
+
+# 配置环境变量
+cp .env.example .env
+# 需要配置达摩盘 API Key（必填）
+echo "DASHSCOPE_API_KEY=your_key" >> .env
+# 可选：模型与超时/重试
+echo "DASHSCOPE_MODEL=qwen-plus" >> .env
+echo "LLM_TIMEOUT_MS=20000" >> .env
+echo "LLM_RETRIES=1" >> .env
+
+# 启动服务端（Express）
+pnpm agent:server
+
+# 启动前端
 pnpm dev
 ```
 
-Open http://localhost:5173 to try the demo. Upload 一个 `.txt`、`.md`、`.json`、`.docx` 或 `.xlsx` 文件，应用会先转换成文本，再通过大模型识别并自动填表，最终结果依然可以人工修改。
+开发时默认通过 Vite 代理把 `/api/agent/analyze` 转发到 `http://localhost:8787`。可通过环境变量调整：
 
-## How the agent integration works
+- `VITE_AGENT_ENDPOINT=/api/agent/analyze`（前端调用路径）
+- `VITE_AGENT_PROXY_TARGET=http://localhost:8787`（代理目标）
 
-- `src/agent/` houses the agent abstraction。`AgentRunner` 始终通过 `RemoteAgentBackend` 调用后端接口，把文档内容与表单 schema 发给 LLM。
-- `src/App.tsx` wires the UI: it reads the uploaded file as text, calls the agent runner with `{ kind: 'text', content, filename }`, and mirrors the agent output into controlled form fields。
-- `src/utils/fileParser.ts` 负责把上传的 Word（DOCX）、Excel（XLSX/CSV）、纯文本、Markdown 等常见格式转换成简洁的文本，再交给智能体分析，并在界面里展示转换提示。
-- The agent returns `fields`, `summary`, `diagnostics`, and `extractedPairs`。LLM 端需要返回这一结构，前端会直接展示。
+## 体系结构
 
-### Customising the form schema
+- 前端智能助手与表单
+  - `src/App.tsx`：只渲染可编辑表单（AutofillForm）+ 悬浮助手（FloatingAssistant）。
+  - `src/components/FloatingAssistant.tsx`：支持文本输入、拖拽/粘贴/选择文件，调用智能体后回填表单。
+  - `src/utils/fileParser.ts`：浏览器侧把 DOCX/XLSX/CSV/TXT/MD/JSON 等转成纯文本，统一交给智能体。
+  - 表单 Schema 在 `src/schema/formSchema.ts`，初始值工具 `src/schema/utils.ts`。
 
-Update the `formSchema` array in `src/schema/formSchema.ts` to add/remove fields, tweak synonyms, or extend hints. The schema is passed directly to the agent so the heuristics know which values to look for.
+- 智能体抽象（可封装为 npm）
+  - `src/agent/`：统一类型与调用入口。`RemoteAgentBackend` 通过 HTTP 调用后端接口。
+  - `src/lib/index.ts`：打包导出，供其他项目复用（types、client、DOM 工具、文件解析等）。
 
-## 接入真实 LLM 后端
+- 服务端（Express + DashScope）
+  - `server/index.ts`：应用入口与中间件。
+  - `server/routes/agent.ts`：`POST /api/agent/analyze` 接收前端 `{ document, options }`，构造提示词并调用达摩盘。
+  - `server/services/llm/dashscopeClient.ts`：请求 DashScope（支持 JSON Schema 约束）。
+  - `server/services/normalize.ts`：容错解析/归一化（字段、候选项、组合、extractedPairs、actions）。
+  - `server/services/prompt.ts`：结合 schema 生成提示词。
+  - `server/config.ts`：读取 `DASHSCOPE_*`、`LLM_TIMEOUT_MS`、`LLM_RETRIES` 等配置。
 
-前端只发送 `{ document, options }` 到 `RemoteAgentBackend` 配置的地址（默认 `/api/agent/analyze`），因此真正的模型调用应该放在服务端。项目提供了一个 Express 示例（`server/agentServer.ts`）演示如何使用 OpenAI Responses API：
+> 安全提示：不要在浏览器端保存任何 API Key，所有模型调用均放在服务端。
 
-```bash
-# 环境变量
-cp .env.example .env
-echo "OPENAI_API_KEY=sk-..." >> .env
-echo "VITE_AGENT_ENDPOINT=/api/agent/analyze" >> .env
-echo "VITE_AGENT_PROXY_TARGET=http://localhost:8787" >> .env
+## 交互说明
 
-# 安装并启动服务端
-pnpm install
-pnpm agent:server
-```
+- 悬浮助手（右下角）支持：
+  - 文本问题输入；
+  - 文件拖拽/粘贴/选择（受支持格式见 `SUPPORTED_FORMAT_LABEL`）。
+- 识别结果按字段/组合自动回填表单；你可以在表单内继续编辑。
 
-`server/agentServer.ts` 会读取表单 schema，构造提示词，让模型直接返回符合 `AgentAnalyzeResult` 结构的 JSON。你可以把它替换成任意模型或企业内部服务，只要维持相同的 HTTP 输入/输出格式即可。开发阶段通过 Vite 代理（`VITE_AGENT_ENDPOINT=/api/...` + `VITE_AGENT_PROXY_TARGET`）即可免去跨域问题；部署时则配置反向代理或让后端提供同一路径。
+## 可复用（npm 准备）
 
-> ⚠️ 不要在浏览器端保存 API Key。确保所有模型调用都走服务端或受控网关。
+`src/lib/index.ts` 暴露常用能力：
 
-## Packaging the agent for reuse (npm-ready)
+- Types 与后端封装：`createRemoteAgentRunner`、`analyzeDocumentWithDefaultAgent` 等；
+- 轻量客户端：`createAgentClient({ endpoint, apiKey })`；
+- 表单/工具：`formSchema`、`createInitialFormValues(schema)`；
+- 文件解析与常量：`parseFileToAgentDocument(file)`、`ACCEPT_ATTRIBUTE_VALUE`、`SUPPORTED_FORMAT_LABEL` 等。
 
-This repo now exposes a public entry under `src/lib/index.ts` to ease npm packaging.
-
-What you can import:
-
-- Types and backends from `src/agent` (re-exported): `Agent*` types, `createRemoteAgentRunner`, `analyzeDocumentWithDefaultAgent`.
-- Client helper: `createAgentClient({ endpoint, apiKey })` → returns `{ analyze(document, options) }`.
-- Schema utilities: `formSchema`, `createInitialFormValues(schema)`.
-- File parsing utils (browser): `parseFileToAgentDocument(file)`, `ACCEPT_ATTRIBUTE_VALUE`, `SUPPORTED_FORMAT_LABEL` and related error classes.
-
-Quick example:
+使用示例：
 
 ```ts
 import {
@@ -61,22 +74,21 @@ import {
   formSchema,
   createInitialFormValues,
   parseFileToAgentDocument,
-} from './src/lib'
+} from "./src/lib";
 
-const client = createAgentClient({ endpoint: '/api/agent/analyze' })
+const client = createAgentClient({ endpoint: "/api/agent/analyze" });
 
 async function handle(file: File) {
-  const parsed = await parseFileToAgentDocument(file)
-  const result = await client.analyze(parsed.document, { formSchema })
-  const initial = createInitialFormValues(formSchema)
-  // merge result into your form based on your UI logic
+  const parsed = await parseFileToAgentDocument(file);
+  const result = await client.analyze(parsed.document, { formSchema });
+  const initial = createInitialFormValues(formSchema);
+  // 将 result 融合到你的表单 UI
 }
 ```
 
-When publishing, use `src/lib/index.ts` as the package entry and set up a build with `tsup`, `rollup`, or `vite build --lib`.
+## 变更记录（相对早期版本）
 
-## Suggested next steps
-
-- Hook the agent backend up to your preferred LLM or toolchain (OpenAI Assistants, Anthropic, Moonshot, etc.).
-- Add a persistence layer so multiple documents or incremental conversations can be processed in sequence.
-- Extend the UI with confidence indicators, inline diffing between old/new values, or multi-step forms powered by the same agent abstractions.
+- 移除旧的“分析面板/候选列表/进度条”等组件与样式，统一为“表单 + 悬浮助手”的交互方式；
+- 服务端改为 DashScope（可配置模型/超时/重试），路由模块化；
+- 归一化层增强，兼容更宽松的 LLM 输出；
+- UnoCSS 精简，仅保留当前 UI 所需样式。
