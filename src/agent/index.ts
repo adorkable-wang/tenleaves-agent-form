@@ -71,7 +71,6 @@ export type {
   AgentDocument,
 } from './types'
 export type {
-  AgentFieldInference,
   AgentFormField,
   AgentFieldOption,
   AgentFieldGroup,

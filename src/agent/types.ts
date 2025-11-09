@@ -20,16 +20,6 @@ export interface AgentAnalyzeOptions {
   metadata?: Record<string, unknown>
 }
 
-export interface AgentFieldInference {
-  fieldId: string
-  label: string
-  value: string | null
-  confidence: number
-  sourceText?: string
-  rationale?: string
-  options?: AgentFieldOption[]
-}
-
 export interface AgentFieldOption {
   value: string
   confidence?: number
@@ -52,17 +42,17 @@ export interface AgentFieldGroup {
   label?: string
   confidence?: number
   rationale?: string
-  fields: Record<string, AgentFieldOption>
+  fieldCandidates: Record<string, AgentFieldOption[]>
 }
 
 export interface AgentAnalyzeResult {
   backend: string
-  fields: AgentFieldInference[]
   summary?: string
   diagnostics?: string[]
   extractedPairs: Record<string, string>
   actions?: AgentAction[]
   fieldGroups?: AgentFieldGroup[]
+  autoSelectGroupId?: string | null
 }
 
 export interface AgentBackend {
