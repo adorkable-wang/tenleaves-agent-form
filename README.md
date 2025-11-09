@@ -13,8 +13,10 @@ cp .env.example .env
 echo "DASHSCOPE_API_KEY=your_key" >> .env
 # 可选：模型与超时/重试
 echo "DASHSCOPE_MODEL=qwen-plus" >> .env
-echo "LLM_TIMEOUT_MS=20000" >> .env
 echo "LLM_RETRIES=1" >> .env
+# 若需要启用超时检测（默认关闭），可配置如下：
+echo "LLM_TIMEOUT_ENABLED=true" >> .env
+echo "LLM_TIMEOUT_MS=45000" >> .env
 
 # 启动服务端（Express）
 pnpm agent:server
@@ -22,6 +24,8 @@ pnpm agent:server
 # 启动前端
 pnpm dev
 ```
+
+> 说明：**不配置 `LLM_TIMEOUT_ENABLED` 时表示关闭超时检测**，即请求将一直等待 DashScope 的响应；只有在将其设为 `true` 时，`LLM_TIMEOUT_MS` 的数值才会生效，可按需调整毫秒值。
 
 开发时默认通过 Vite 代理把 `/api/agent/analyze` 转发到 `http://localhost:8787`。可通过环境变量调整：
 
@@ -31,12 +35,14 @@ pnpm dev
 ## 体系结构
 
 - 前端智能助手与表单
+
   - `src/App.tsx`：只渲染可编辑表单（AutofillForm）+ 悬浮助手（FloatingAssistant）。
   - `src/components/FloatingAssistant.tsx`：支持文本输入、拖拽/粘贴/选择文件，调用智能体后回填表单。
   - `src/utils/fileParser.ts`：浏览器侧把 DOCX/XLSX/CSV/TXT/MD/JSON 等转成纯文本，统一交给智能体。
   - 表单 Schema 在 `src/schema/formSchema.ts`，初始值工具 `src/schema/utils.ts`。
 
 - 智能体抽象（可封装为 npm）
+
   - `src/agent/`：统一类型与调用入口。`RemoteAgentBackend` 通过 HTTP 调用后端接口。
   - `src/lib/index.ts`：打包导出，供其他项目复用（types、client、DOM 工具、文件解析等）。
 
@@ -46,7 +52,7 @@ pnpm dev
   - `server/services/llm/dashscopeClient.ts`：请求 DashScope（支持 JSON Schema 约束）。
   - `server/services/normalize.ts`：容错解析/归一化（字段、候选项、组合、extractedPairs、actions）。
   - `server/services/prompt.ts`：结合 schema 生成提示词。
-  - `server/config.ts`：读取 `DASHSCOPE_*`、`LLM_TIMEOUT_MS`、`LLM_RETRIES` 等配置。
+- `server/config.ts`：读取 `DASHSCOPE_*`、`LLM_TIMEOUT_ENABLED`、`LLM_TIMEOUT_MS`、`LLM_RETRIES` 等配置。
 
 > 安全提示：不要在浏览器端保存任何 API Key，所有模型调用均放在服务端。
 
@@ -56,6 +62,8 @@ pnpm dev
   - 文本问题输入；
   - 文件拖拽/粘贴/选择（受支持格式见 `SUPPORTED_FORMAT_LABEL`）。
 - 识别结果按字段/组合自动回填表单；你可以在表单内继续编辑。
+- 分析过程提供“乐观进度”与用时展示：解析文件 → 准备请求 → 等待模型响应 → 解析回填（组件：`src/components/AssistantProgress.tsx`）。
+- LLM 返回的字段/候选会附带 `confidence`，服务端仅保留置信度 ≥ 75% 的条目，并按置信度降序排序。
 
 ## 可复用（npm 准备）
 
