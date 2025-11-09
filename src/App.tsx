@@ -35,27 +35,27 @@ function App() {
   const fieldOptionsMap = useMemo<Record<string, AgentFieldOption[]>>(() => {
     if (!analysisResult) return {};
     const map: Record<string, AgentFieldOption[]> = {};
-    for (const field of analysisResult.fields) {
-      if (field.options?.length) {
-        map[field.fieldId] = field.options;
-      }
-    }
     for (const group of analysisResult.fieldGroups ?? []) {
-      Object.entries(group.fields).forEach(([fieldId, option]) => {
-        if (!map[fieldId]) {
-          map[fieldId] = [];
-        }
-        if (
-          !map[fieldId].some(
-            (existing) =>
-              existing.value === option.value &&
-              existing.groupId === option.groupId
-          )
-        ) {
-          map[fieldId].push(option);
+      const candidates = group.fieldCandidates;
+      Object.entries(candidates).forEach(([fieldId, options]) => {
+        if (!options?.length) return;
+        if (!map[fieldId]) map[fieldId] = [];
+        for (const option of options) {
+          if (
+            !map[fieldId].some(
+              (existing) =>
+                existing.value === option.value &&
+                existing.groupId === option.groupId
+            )
+          ) {
+            map[fieldId].push(option);
+          }
         }
       });
     }
+    Object.values(map).forEach((options) =>
+      options.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))
+    );
     return map;
   }, [analysisResult]);
 
@@ -66,18 +66,33 @@ function App() {
     if (!analysisResult) return;
     if (!import.meta.env.DEV) return;
 
-    const printableFields = analysisResult.fields.map((field) => ({
-      字段编号: field.fieldId,
-      标签: field.label,
-      识别值: field.value ?? "",
-      置信度: `${Math.round(field.confidence * 100)}%`,
-    }));
-
     console.groupCollapsed(
       `%c智能体识别结果 - ${analysisResult.backend}`,
       "color:#2563eb;font-weight:600;"
     );
-    console.table(printableFields);
+      const printableGroups = (analysisResult.fieldGroups ?? []).map((group) => ({
+        分组: group.id,
+        置信度: group.confidence != null ? `${Math.round(group.confidence * 100)}%` : "—",
+        字段数: Object.keys(group.fieldCandidates).length,
+      }));
+    console.table(printableGroups);
+
+      const firstGroup = analysisResult.fieldGroups?.[0];
+      if (firstGroup?.fieldCandidates) {
+        const preview = Object.entries(firstGroup.fieldCandidates).map(
+          ([fieldId, opts]) => ({
+            字段: fieldId,
+            首选值: opts?.[0]?.value ?? "",
+            首选置信度:
+              opts?.[0]?.confidence != null
+                ? `${Math.round((opts[0].confidence ?? 0) * 100)}%`
+                : "—",
+          })
+        );
+      console.groupCollapsed("第一分组字段预览");
+      console.table(preview);
+      console.groupEnd();
+    }
 
     const hasPairs = Object.keys(analysisResult.extractedPairs).length > 0;
     if (hasPairs) {

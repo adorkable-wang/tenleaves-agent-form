@@ -5,12 +5,27 @@
  * - 单输入框：文本输入 + 粘贴文件 + 拖拽文件 + 点击“＋”选择文件
  * - 提交后调用智能体 → 输出消息 → 回填表单并高亮 → 派发事件
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import type { AgentAnalyzeResult, AgentFormField } from "../agent";
 import { analyzeDocumentWithDefaultAgent } from "../agent";
-import { parseFileToAgentDocument, ACCEPTED_FILE_EXTENSIONS, ACCEPT_ATTRIBUTE_VALUE, SUPPORTED_FORMAT_LABEL } from "../utils/fileParser";
-import { chooseInitialValuesFromResult, emitAutofillEvent } from "../agent/utils";
+import {
+  parseFileToAgentDocument,
+  ACCEPTED_FILE_EXTENSIONS,
+  ACCEPT_ATTRIBUTE_VALUE,
+  SUPPORTED_FORMAT_LABEL,
+} from "../utils/fileParser";
+import {
+  chooseInitialValuesFromResult,
+  emitAutofillEvent,
+} from "../agent/utils";
+import AssistantProgress, { type ProgressStep } from "./AssistantProgress";
 
 // 聊天消息结构（包含时间戳，便于显示发送时间）
 type ChatMsg = {
@@ -37,6 +52,11 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  // 进度与用时
+  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const tickRef = useRef<number | null>(null);
+  const startAtRef = useRef<number | null>(null);
   // 引用与拖拽状态
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -74,11 +94,26 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
   const formatAssistantSummary = (result: AgentAnalyzeResult): string => {
     const lines: string[] = [];
     if (result.summary) lines.push(`摘要：${result.summary}`);
-    lines.push("识别字段：");
-    for (const f of result.fields) {
-      const v = f.value ?? f.options?.[0]?.value ?? "";
-      const conf = Math.round((f.confidence ?? 0) * 100);
-      lines.push(`- ${f.label}: ${v || "（空）"}（置信度 ${conf}%）`);
+    const groups = result.fieldGroups ?? [];
+    groups.forEach((group, index) => {
+      const headerConf =
+        group.confidence != null
+          ? `${Math.round(group.confidence * 100)}%`
+          : "—";
+      lines.push(`分组 ${index + 1}（ID: ${group.id}，置信度 ${headerConf}）`);
+      const candidates = group.fieldCandidates;
+      Object.entries(candidates).forEach(([fieldId, opts]) => {
+        if (!opts?.length) return;
+        const best = opts[0];
+        const conf =
+          best.confidence != null
+            ? `${Math.round(best.confidence * 100)}%`
+            : "—";
+        lines.push(`- ${fieldId}: ${best.value || "（空）"}（置信度 ${conf}）`);
+      });
+    });
+    if (!groups.length) {
+      lines.push("（未识别到任何分组）");
     }
     return lines.join("\n");
   };
@@ -89,16 +124,72 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
     if (!file && !text) return;
     setPending(true);
     setError(null);
+    // 初始化进度
+    const steps: ProgressStep[] = [
+      {
+        id: "parse",
+        label: file ? "解析文件" : "准备内容",
+        status: file ? "active" : "done",
+      },
+      { id: "prepare", label: "准备请求", status: file ? "pending" : "active" },
+      { id: "await", label: "等待模型响应", status: "pending" },
+      { id: "apply", label: "解析回填", status: "pending" },
+    ];
+    setProgressSteps(steps);
+    // 启动计时
+    startAtRef.current = Date.now();
+    setElapsedMs(0);
+    if (tickRef.current) window.clearInterval(tickRef.current);
+    tickRef.current = window.setInterval(() => {
+      if (startAtRef.current) setElapsedMs(Date.now() - startAtRef.current);
+    }, 200);
     try {
       addMsg("user", file ? `上传文件：${file.name}` : text);
-
-      const docPayload = file
-        ? (await parseFileToAgentDocument(file)).document
-        : ({ kind: "text", content: text, filename: "input.txt" } as const);
-
+      // 解析文件 / 准备内容
+      let docPayload: { kind: "text"; content: string; filename?: string };
+      if (file) {
+        const parsed = await parseFileToAgentDocument(file);
+        // 更新解析步骤为完成，并激活准备请求
+        setProgressSteps((prev) =>
+          prev.map((s) =>
+            s.id === "parse"
+              ? { ...s, status: "done", detail: parsed.formatLabel }
+              : s.id === "prepare"
+              ? { ...s, status: "active" }
+              : s
+          )
+        );
+        docPayload = parsed.document;
+      } else {
+        docPayload = {
+          kind: "text",
+          content: text,
+          filename: "input.txt",
+        } as const;
+      }
+      // 准备请求完成，进入等待模型响应
+      setProgressSteps((prev) =>
+        prev.map((s) =>
+          s.id === "prepare"
+            ? { ...s, status: "done" }
+            : s.id === "await"
+            ? { ...s, status: "active" }
+            : s
+        )
+      );
       const result = await analyzeDocumentWithDefaultAgent(docPayload, {
         formSchema: schema,
       });
+      // 模型响应返回
+      setProgressSteps((prev) =>
+        prev.map((s) =>
+          s.id === "await"
+            ? { ...s, status: "done" }
+            : s.id === "apply"
+            ? { ...s, status: "active" }
+            : s
+        )
+      );
       const values = computeInitialFillValuesFromResult(result);
       onApply(values, result);
       // 表单联动：高亮已填充的表单字段，并派发自定义事件
@@ -115,22 +206,42 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
             }, 1200);
           }
         }
-        emitAutofillEvent(values, result.backend)
+        emitAutofillEvent(values, result.backend);
       } catch {
         /* empty */
       }
 
+      // 解析回填完成
+      setProgressSteps((prev) =>
+        prev.map((s) => (s.id === "apply" ? { ...s, status: "done" } : s))
+      );
       addMsg("assistant", formatAssistantSummary(result));
       setInputText("");
       setPendingFile(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "智能体处理失败";
       setError(msg);
+      // 将当前 active 步骤标记为 error
+      setProgressSteps((prev) =>
+        prev.map((s) =>
+          s.status === "active" ? { ...s, status: "error", detail: msg } : s
+        )
+      );
       addMsg("assistant", `出错：${msg}`);
     } finally {
       setPending(false);
+      if (tickRef.current) {
+        window.clearInterval(tickRef.current);
+        tickRef.current = null;
+      }
     }
-  }, [inputText, schema, computeInitialFillValuesFromResult, onApply, pendingFile]);
+  }, [
+    inputText,
+    schema,
+    computeInitialFillValuesFromResult,
+    onApply,
+    pendingFile,
+  ]);
 
   const buttonLabel = useMemo(() => (open ? "关闭助手" : "打开助手"), [open]);
 
@@ -216,17 +327,17 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
   const ACCEPT_EXTS_SET = useMemo(() => {
     const set = new Set<string>();
     for (const ext of ACCEPTED_FILE_EXTENSIONS) {
-      const cleaned = ext.startsWith('.') ? ext.slice(1) : ext;
+      const cleaned = ext.startsWith(".") ? ext.slice(1) : ext;
       set.add(cleaned.toLowerCase());
     }
     return set;
   }, []);
   const isAcceptExt = (name: string) => {
     const lower = name.toLowerCase();
-    const idx = lower.lastIndexOf('.')
-    if (idx === -1) return false
-    const ext = lower.slice(idx + 1)
-    return ACCEPT_EXTS_SET.has(ext)
+    const idx = lower.lastIndexOf(".");
+    if (idx === -1) return false;
+    const ext = lower.slice(idx + 1);
+    return ACCEPT_EXTS_SET.has(ext);
   };
   const handleSelectFile = (file: File) => {
     if (file.size > MAX_FILE_BYTES) {
@@ -275,6 +386,13 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                   ✕
                 </button>
               </div>
+              {/* 进度条仅在处理中显示 */}
+              {pending ? (
+                <AssistantProgress
+                  steps={progressSteps}
+                  elapsedMs={elapsedMs}
+                />
+              ) : null}
               <div
                 className="chat-messages"
                 aria-live="polite"
@@ -400,7 +518,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
         <button
           ref={containerRef}
           type="button"
-          className={`assistant-toggle ${open ? 'assistant-toggle--open' : ''}`}
+          className={`assistant-toggle ${open ? "assistant-toggle--open" : ""}`}
           onClick={toggle}
           aria-expanded={open}
           aria-label={buttonLabel}

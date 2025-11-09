@@ -10,17 +10,13 @@ import type { AgentAnalyzeResult } from './types'
  */
 export function chooseInitialValuesFromResult(result: AgentAnalyzeResult): Record<string, string> {
   const values: Record<string, string> = {}
-  const primaryGroup = result.fieldGroups?.length
-    ? [...result.fieldGroups].sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))[0]
-    : null
-  if (primaryGroup) {
-    for (const [fieldId, option] of Object.entries(primaryGroup.fields)) {
-      if (option.value) values[fieldId] = option.value
-    }
-  }
-  for (const field of result.fields) {
-    const v = field.value ?? field.options?.[0]?.value
-    if (v && !values[field.fieldId]) values[field.fieldId] = v
+  const groups = result.fieldGroups ?? []
+  if (groups.length !== 1) return values
+  const group = groups[0]
+  const fieldCandidates = group.fieldCandidates
+  for (const [fieldId, candidates] of Object.entries(fieldCandidates)) {
+    const best = candidates?.[0]
+    if (best?.value) values[fieldId] = best.value
   }
   return values
 }
