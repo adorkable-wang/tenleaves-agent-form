@@ -4,6 +4,7 @@ import {
   DASHSCOPE_MODEL,
   LLM_TIMEOUT_MS,
   LLM_RETRIES,
+  LLM_TIMEOUT_ENABLED,
 } from "../../config";
 import { agentSchema } from "../../schemas/jsonSchema";
 import { fetchWithTimeout } from "../../utils/fetchWithTimeout";
@@ -17,7 +18,7 @@ interface DashscopePayload {
   model: string;
   response_format: {
     type: string;
-    json_schema: { name: string; schema: unknown };
+    json_schema: { name: string; schema: unknown; strict?: boolean };
   };
   messages: DashscopeMessage[];
 }
@@ -42,7 +43,11 @@ export async function sendDashscope(
     model: DASHSCOPE_MODEL,
     response_format: {
       type: "json_schema",
-      json_schema: { name: "agent_extract_schema", schema: agentSchema() },
+      json_schema: {
+        name: "agent_extract_schema",
+        schema: agentSchema(),
+        strict: true,
+      },
     },
     messages: [
       {
@@ -64,7 +69,11 @@ export async function sendDashscope(
       },
       body: JSON.stringify(payload),
     },
-    { timeoutMs: LLM_TIMEOUT_MS, retries: LLM_RETRIES }
+    {
+      timeoutMs: LLM_TIMEOUT_MS,
+      retries: LLM_RETRIES,
+      enableTimeout: LLM_TIMEOUT_ENABLED,
+    }
   );
   if (!res.ok) {
     const text = await res.text();
