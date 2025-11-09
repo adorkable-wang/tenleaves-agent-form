@@ -5,7 +5,6 @@ export function agentSchema() {
   return {
     type: "object",
     properties: {
-      backend: { type: "string" },
       summary: { type: "string" },
       diagnostics: {
         type: "array",
@@ -15,21 +14,6 @@ export function agentSchema() {
         type: "object",
         additionalProperties: { type: "string" },
       },
-      fields: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            fieldId: { type: "string" },
-            label: { type: "string" },
-            value: { type: ["string", "null"] },
-            confidence: { type: "number" },
-            sourceText: { type: ["string", "null"] },
-            rationale: { type: ["string", "null"] },
-          },
-          required: ["fieldId", "label", "value", "confidence"],
-        },
-      },
       fieldGroups: {
         type: "array",
         items: {
@@ -37,28 +21,37 @@ export function agentSchema() {
           properties: {
             id: { type: "string" },
             label: { type: ["string", "null"] },
-            confidence: { type: ["number", "null"] },
-            rationale: { type: ["string", "null"] },
-            fields: {
+            confidence: { type: "number", minimum: 0, maximum: 1 },
+            rationale: { type: "string" },
+            fieldCandidates: {
               type: "object",
               additionalProperties: {
-                anyOf: [
-                  { type: "string" },
-                  {
-                    type: "object",
-                    properties: {
-                      value: { type: "string" },
-                      confidence: { type: ["number", "null"] },
-                      rationale: { type: ["string", "null"] },
-                      sourceText: { type: ["string", "null"] },
+                type: "array",
+                minItems: 1,
+                items: {
+                  anyOf: [
+                    { type: "string" },
+                    {
+                      type: "object",
+                      properties: {
+                        value: { type: "string" },
+                        confidence: {
+                          anyOf: [
+                            { type: "number", minimum: 0, maximum: 1 },
+                            { type: "null" },
+                          ],
+                        },
+                        rationale: { type: ["string", "null"] },
+                        sourceText: { type: ["string", "null"] },
+                      },
+                      required: ["value"],
                     },
-                    required: ["value"],
-                  },
-                ],
+                  ],
+                },
               },
             },
           },
-          required: ["id", "fields"],
+          required: ["id", "confidence", "rationale", "fieldCandidates"],
         },
       },
       actions: {
@@ -69,13 +62,12 @@ export function agentSchema() {
             type: { type: "string" },
             target: { type: "string" },
             payload: { type: "object" },
-            confidence: { type: "number" },
+            confidence: { type: "number", minimum: 0, maximum: 1 },
             rationale: { type: "string" },
           },
           required: ["type", "confidence"],
         },
       },
-    },
-    required: ["fields", "extractedPairs"],
+    }
   };
 }
