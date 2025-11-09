@@ -41,11 +41,13 @@ agentRouter.post(
   "/analyze",
   async (
     req: Request,
-    res: Response<AgentAnalyzeResult | { error: string }>
+    res: Response<AgentAnalyzeResult | { error: string; issues?: unknown }>
   ) => {
     const parsed = BodySchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: "请求体格式不正确", issues: parsed.error.issues });
+      return res
+        .status(400)
+        .json({ error: "请求体格式不正确", issues: parsed.error.issues });
     }
     const { document, options } = parsed.data as {
       document: AgentDocument;
@@ -62,13 +64,13 @@ agentRouter.post(
         | string
         | unknown[]
         | undefined;
-      const payload = extractPayload(content, options.formSchema);
+      const payload = extractPayload(content);
       const normalized = normalizeAgentResult(payload, options.formSchema);
       res.json(normalized);
     } catch (error) {
       // 识别超时/中断，返回 504，便于前端区分
       if (isAbortError(error)) {
-        return res.status(504).json({ error: '上游模型请求超时，请稍后重试' })
+        return res.status(504).json({ error: "上游模型请求超时，请稍后重试" });
       }
       console.error(error);
       res.status(500).json({
@@ -78,11 +80,13 @@ agentRouter.post(
   }
 );
 
+type AbortLikeError = { name?: unknown; message?: unknown };
+
 function isAbortError(err: unknown): boolean {
-  return (
-    !!err &&
-    typeof err === 'object' &&
-    ((err as any).name === 'AbortError' ||
-      /aborted|abort/i.test(String((err as any).message ?? '')))
-  )
+  if (!err || typeof err !== "object") return false;
+  const candidate = err as AbortLikeError;
+  const name = typeof candidate.name === "string" ? candidate.name : "";
+  const message =
+    typeof candidate.message === "string" ? candidate.message : "";
+  return name === "AbortError" || /aborted|abort/i.test(message);
 }
