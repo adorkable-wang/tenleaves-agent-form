@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express'
 
 // 统一错误处理中间件：将异常转换为 { error } JSON 输出
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
+  void _next
   // Zod 校验错误
   if (isZodError(err)) {
     return res.status(400).json({ error: '请求体格式不正确', issues: err.issues })
@@ -12,6 +13,7 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
 }
 
 function isZodError(err: unknown): err is { issues: unknown[] } {
-  return Boolean(err && typeof err === 'object' && 'issues' in (err as any))
+  if (!err || typeof err !== 'object' || !('issues' in err)) return false
+  const issues = (err as { issues?: unknown }).issues
+  return Array.isArray(issues)
 }
-
