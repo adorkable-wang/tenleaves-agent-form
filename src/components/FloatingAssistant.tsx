@@ -23,34 +23,19 @@ import { analyzeDocumentWithDefaultAgent } from "../agent";
 import {
   parseFileToAgentDocument,
   ACCEPTED_FILE_EXTENSIONS,
-  ACCEPT_ATTRIBUTE_VALUE,
   SUPPORTED_FORMAT_LABEL,
 } from "../utils/fileParser";
 import {
   buildValuesFromGroup,
-  chooseInitialValuesFromResult,
   emitAutofillEvent,
 } from "../agent/utils";
-import AssistantProgress, { type ProgressStep } from "./AssistantProgress";
-
-// 聊天消息结构（包含时间戳，便于显示发送时间）
-type ChatMsg = {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  ts: number;
-};
-
-type GroupPreview = {
-  group: AgentFieldGroup;
-  entries: Array<{
-    fieldId: string;
-    label: string;
-    value: string;
-    confidence?: number;
-  }>;
-  duplicateValues: Set<string>;
-};
+import { type ProgressStep } from "./assistant/types";
+import TaskList from "./assistant/TaskList";
+import ResultSection from "./assistant/ResultSection";
+import AssistantInputArea from "./assistant/InputArea";
+import { useAssistantTasks, type TaskLog } from "../hooks/useAssistantTasks";
+import { useGroupPreviews } from "../hooks/useGroupPreviews";
+import { useProgressTimer } from "../hooks/useProgressTimer";
 
 interface Props {
   schema: AgentFormField[];
@@ -64,22 +49,28 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
     "closed"
   );
   // 会话/输入/状态
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [inputText, setInputText] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   // 进度与用时
-  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const tickRef = useRef<number | null>(null);
-  const startAtRef = useRef<number | null>(null);
-  const lastSubmissionRef = useRef<{ docPayload: AgentDocument; label: string } | null>(null);
-  const [lastResult, setLastResult] = useState<AgentAnalyzeResult | null>(null);
+  const { elapsedMs, startTimer, stopTimer } = useProgressTimer();
+  const lastSubmissionRef = useRef<{
+    docPayload: AgentDocument;
+    label: string;
+  } | null>(null);
+  const [activeResult, setActiveResult] = useState<AgentAnalyzeResult | null>(
+    null
+  );
   const [manualGroupId, setManualGroupId] = useState<string | null>(null);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const { tasks, appendTask, updateTask, clearTasks } = useAssistantTasks();
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const activeTaskIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeTaskIdRef.current = activeTaskId;
+  }, [activeTaskId]);
+
   // 引用与拖拽状态
-  const messagesRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -100,40 +91,14 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
     });
   };
 
-  const addMsg = useCallback((role: ChatMsg["role"], content: string) => {
-    setMessages((prev) => [
-      ...prev,
-      { id: String(Date.now()) + Math.random(), role, content, ts: Date.now() },
-    ]);
-  }, []);
-
-  const computeInitialFillValuesFromResult = useCallback(
-    (result: AgentAnalyzeResult) => chooseInitialValuesFromResult(result),
-    []
-  );
-
-  const startTimer = useCallback(() => {
-    startAtRef.current = Date.now();
-    setElapsedMs(0);
-    if (tickRef.current) window.clearInterval(tickRef.current);
-    tickRef.current = window.setInterval(() => {
-      if (startAtRef.current) {
-        setElapsedMs(Date.now() - startAtRef.current);
-      }
-    }, 200);
-  }, []);
-
-  const stopTimer = useCallback(() => {
-    if (tickRef.current) {
-      window.clearInterval(tickRef.current);
-      tickRef.current = null;
-    }
-  }, []);
-
   const buildInitialSteps = useCallback(
     (mode: "file" | "text" | "retry", detail?: string): ProgressStep[] => {
       const parseLabel =
-        mode === "file" ? "解析文件" : mode === "retry" ? "复用内容" : "准备内容";
+        mode === "file"
+          ? "解析文件"
+          : mode === "retry"
+          ? "复用内容"
+          : "准备内容";
       const parseStatus = mode === "file" ? "active" : "done";
       const parseDetail =
         detail ??
@@ -144,7 +109,12 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
           : undefined);
       const prepareStatus = mode === "file" ? "pending" : "active";
       return [
-        { id: "parse", label: parseLabel, status: parseStatus, detail: parseDetail },
+        {
+          id: "parse",
+          label: parseLabel,
+          status: parseStatus,
+          detail: parseDetail,
+        },
         { id: "prepare", label: "准备请求", status: prepareStatus },
         { id: "await", label: "等待模型响应", status: "pending" },
         { id: "apply", label: "解析回填", status: "pending" },
@@ -153,158 +123,108 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
     []
   );
 
-  const updateSteps = useCallback((updates: Partial<Record<string, Partial<ProgressStep>>>) => {
-    setProgressSteps((prev) =>
-      prev.map((step) =>
-        updates[step.id] ? { ...step, ...updates[step.id]! } : step
-      )
-    );
-  }, []);
-
-  const applyResultToForm = useCallback(
-    (result: AgentAnalyzeResult) => {
-      const values = computeInitialFillValuesFromResult(result);
-      onApply(values, result);
-      try {
-        for (const [fieldId] of Object.entries(values)) {
-          const input = window.document.querySelector<HTMLElement>(
-            `#${CSS.escape(fieldId)}`
-          );
-          if (input) {
-            const prev = input.className;
-            input.className = `${prev} agent-flash`;
-            window.setTimeout(() => {
-              input.className = prev;
-            }, 1200);
-          }
-        }
-        emitAutofillEvent(values, result.backend);
-      } catch {
-        /* noop */
-      }
-      setInputText("");
-      setPendingFile(null);
+  const updateTaskSteps = useCallback(
+    (
+      taskId: string,
+      updates: Partial<Record<string, Partial<ProgressStep>>>
+    ) => {
+      updateTask(taskId, (task) => ({
+        ...task,
+        steps: task.steps.map((step) =>
+          updates[step.id] ? { ...step, ...updates[step.id]! } : step
+        ),
+      }));
     },
-    [computeInitialFillValuesFromResult, onApply, setInputText, setPendingFile]
+    [updateTask]
   );
 
-  const fieldLabelMap = useMemo<Record<string, string>>(() => {
-    const map: Record<string, string> = {};
-    schema.forEach((field) => {
-      map[field.id] = field.label;
-    });
-    return map;
-  }, [schema]);
+  const groupPreviews = useGroupPreviews(activeResult, schema);
 
-  const formFieldOrder = useMemo(() => schema.map((field) => field.id), [schema]);
-
-  const groupPreviews = useMemo<GroupPreview[]>(() => {
-    if (!lastResult?.fieldGroups?.length) return [];
-    return lastResult.fieldGroups.map((group) => {
-      const orderedEntries = formFieldOrder
-        .map((fieldId) => {
-          const candidate = group.fieldCandidates?.[fieldId]?.[0];
-          if (!candidate?.value) return null;
-          return {
-            fieldId,
-            label: fieldLabelMap[fieldId] ?? fieldId,
-            value: candidate.value,
-            confidence: candidate.confidence,
-          };
-        })
-        .filter((item): item is NonNullable<typeof item> => Boolean(item));
-      const counts = new Map<string, number>();
-      orderedEntries.forEach((entry) => {
-        const normalized = entry.value.trim().toLowerCase();
-        counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
-      });
-      const duplicateValues = new Set<string>();
-      counts.forEach((count, key) => {
-        if (count > 1) duplicateValues.add(key);
-      });
-      return {
-        group,
-        entries: orderedEntries,
-        duplicateValues,
-      };
-    });
-  }, [lastResult, fieldLabelMap, formFieldOrder]);
-
-  const toggleGroupExpand = useCallback((groupId: string) => {
-    setExpandedGroups((prev) => ({
-      ...prev,
-      [groupId]: !prev[groupId],
-    }));
-  }, []);
+  const handleSelectTask = useCallback(
+    (task: TaskLog) => {
+      setActiveResult(task.result ?? null);
+      setManualGroupId(null);
+      setActiveTaskId(task.id);
+    },
+    []
+  );
 
   const executeAnalysis = useCallback(
-    async (docPayload: AgentDocument) => {
-      updateSteps({
+    async (taskId: string, docPayload: AgentDocument) => {
+      updateTaskSteps(taskId, {
         prepare: { status: "done" },
         await: { status: "active" },
       });
       const result = await analyzeDocumentWithDefaultAgent(docPayload, {
         formSchema: schema,
       });
-      setLastResult(result);
+      if (activeTaskIdRef.current === taskId) {
+        setActiveResult(result);
+      }
+      updateTask(taskId, (task) => ({
+        ...task,
+        status: "success",
+        durationMs: Date.now() - task.startedAt,
+        result,
+      }));
       setManualGroupId(null);
-      setExpandedGroups({});
-      updateSteps({
+      updateTaskSteps(taskId, {
         await: { status: "done" },
         apply: { status: "active" },
       });
-      applyResultToForm(result);
-      updateSteps({
+      setInputText("");
+      setPendingFile(null);
+      updateTaskSteps(taskId, {
         apply: { status: "done" },
       });
     },
-    [schema, updateSteps, applyResultToForm]
-  );
-
-  const beginWorkflow = useCallback(
-    (mode: "file" | "text" | "retry", detail?: string) => {
-      setProgressSteps(buildInitialSteps(mode, detail));
-      startTimer();
-    },
-    [buildInitialSteps, startTimer]
+    [schema, updateTaskSteps, updateTask, setManualGroupId, setInputText, setPendingFile, setActiveResult]
   );
 
   const handleAnalysisError = useCallback(
-    (message: string) => {
+    (taskId: string, message: string) => {
       setError(message);
-      setProgressSteps((prev) =>
-        prev.map((s) =>
-          s.status === "active"
-            ? {
-                ...s,
-                status: "error",
-                detail: message,
-              }
-            : s
-        )
-      );
-      addMsg("assistant", `出错：${message}`);
+      updateTask(taskId, (task) => ({
+        ...task,
+        status: "error",
+        error: message,
+        durationMs: Date.now() - task.startedAt,
+        steps: task.steps.map((step) =>
+          step.status === "active"
+            ? { ...step, status: "error", detail: message }
+            : step
+        ),
+      }));
     },
-    [addMsg]
+    [updateTask]
   );
 
   const handleSubmit = useCallback(async () => {
-    if (pending) return;
     const file = pendingFile;
     const text = inputText.trim();
-    if (!file && !text) return;
+    if (pending || (!file && !text)) return;
     setPending(true);
     setError(null);
-    const mode = file ? "file" : "text";
-    beginWorkflow(mode, file ? undefined : "文本输入");
+    setManualGroupId(null);
+    setActiveResult(null);
+    const mode: "file" | "text" = file ? "file" : "text";
+    const taskId = `${Date.now()}`;
+    const taskLabel = file ? file.name : "文本输入";
+    const initialSteps = buildInitialSteps(mode, file ? undefined : "文本输入");
+    appendTask({
+      id: taskId,
+      label: taskLabel,
+      status: "pending",
+      startedAt: Date.now(),
+      steps: initialSteps,
+    });
+    setActiveTaskId(taskId);
+    startTimer();
     try {
-      addMsg("user", file ? `上传文件：${file.name}` : text);
       let docPayload: AgentDocument;
-      // 解析文件 / 准备内容
       if (file) {
         const parsed = await parseFileToAgentDocument(file);
-        // 更新解析步骤为完成，并激活准备请求
-        updateSteps({
+        updateTaskSteps(taskId, {
           parse: { status: "done", detail: parsed.formatLabel },
           prepare: { status: "active" },
         });
@@ -318,26 +238,29 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
       }
       lastSubmissionRef.current = {
         docPayload,
-        label: file ? file.name : "文本输入",
+        label: taskLabel,
       };
-      await executeAnalysis(docPayload);
+      await executeAnalysis(taskId, docPayload);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "智能体处理失败";
-      handleAnalysisError(msg);
+      handleAnalysisError(taskId, msg);
     } finally {
       setPending(false);
       stopTimer();
     }
   }, [
     pending,
-    inputText,
     pendingFile,
-    beginWorkflow,
-    updateSteps,
+    inputText,
+    buildInitialSteps,
+    updateTaskSteps,
     executeAnalysis,
     handleAnalysisError,
+    startTimer,
     stopTimer,
-    addMsg,
+    appendTask,
+    setActiveResult,
+    setActiveTaskId,
   ]);
 
   const handleRetry = useCallback(async () => {
@@ -346,42 +269,52 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
     if (!last) return;
     setPending(true);
     setError(null);
-    beginWorkflow("retry", last.label);
+    const taskId = `${Date.now()}`;
+    const retrySteps = buildInitialSteps("retry", last.label);
+    appendTask({
+      id: taskId,
+      label: `${last.label}（重试）`,
+      status: "pending",
+      startedAt: Date.now(),
+      steps: retrySteps,
+    });
+    setActiveTaskId(taskId);
+    setActiveResult(null);
+    startTimer();
     try {
-      await executeAnalysis(last.docPayload);
+      await executeAnalysis(taskId, last.docPayload);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "智能体处理失败";
-      handleAnalysisError(msg);
+      handleAnalysisError(taskId, msg);
     } finally {
       setPending(false);
       stopTimer();
     }
-  }, [pending, beginWorkflow, executeAnalysis, handleAnalysisError, stopTimer]);
+  }, [
+    pending,
+    buildInitialSteps,
+    executeAnalysis,
+    handleAnalysisError,
+    stopTimer,
+    appendTask,
+    startTimer,
+    setActiveResult,
+    setActiveTaskId,
+  ]);
 
   const handleApplyGroupFromAssistant = useCallback(
     (group: AgentFieldGroup) => {
-      if (!lastResult) return;
+      if (!activeResult) return;
       const values = buildValuesFromGroup(group);
       if (!Object.keys(values).length) return;
-      onApply(values, lastResult);
+      onApply(values, activeResult);
+      emitAutofillEvent(values, activeResult.backend);
       setManualGroupId(group.id);
-      setExpandedGroups((prev) => ({ ...prev, [group.id]: true }));
-      addMsg(
-        "assistant",
-        `已使用分组「${group.label ?? group.id}」回填表单。`
-      );
     },
-    [lastResult, onApply, addMsg]
+    [activeResult, onApply]
   );
 
   const buttonLabel = useMemo(() => (open ? "关闭助手" : "打开助手"), [open]);
-
-  // 新消息滚动到底部
-  useEffect(() => {
-    const el = messagesRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [messages]);
 
   // 打开时聚焦输入框
   useEffect(() => {
@@ -517,50 +450,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                   ✕
                 </button>
               </div>
-              <div className="assistant-body">
-                {pending ? (
-                  <AssistantProgress
-                    steps={progressSteps}
-                    elapsedMs={elapsedMs}
-                  />
-                ) : null}
-                <div
-                  className="chat-messages"
-                  aria-live="polite"
-                  ref={messagesRef}
-                >
-                  {messages.length === 0 ? (
-                    <p className="subtle">在下方输入文本或上传文件开始分析。</p>
-                  ) : (
-                    messages.map((m) => {
-                      const time = new Date(m.ts).toLocaleTimeString();
-                      const isUser = m.role === "user";
-                      const avatar = isUser
-                        ? "🧑"
-                        : m.role === "assistant"
-                        ? "🤖"
-                        : "ℹ️";
-                      return (
-                        <div
-                          key={m.id}
-                          className={`chat-row ${
-                            isUser ? "self-end flex-row-reverse" : "self-start"
-                          }`}
-                        >
-                          <div className={`chat-line chat-line--${m.role}`}>
-                            <pre>{m.content}</pre>
-                          </div>
-                          <div className="chat-meta">
-                            <div className="chat-avatar" aria-hidden>
-                              {avatar}
-                            </div>
-                            <span className="chat-time">{time}</span>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+              <div className="assistant-body space-y-4">
                 {error ? (
                   <p className="error mt-0 text-sm">
                     {error}
@@ -568,7 +458,9 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                       <button
                         type="button"
                         className="ml-2 text-indigo-700 underline disabled:opacity-50"
-                        onClick={handleRetry}
+                        onClick={() => {
+                          void handleRetry();
+                        }}
                         disabled={pending}
                       >
                         重试
@@ -576,206 +468,56 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                     ) : null}
                   </p>
                 ) : null}
-                {groupPreviews.length ? (
-                  <div className="space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                    {groupPreviews.map(({ group, entries, duplicateValues }) => {
-                      const confidence =
-                        group.confidence != null
-                          ? `${Math.round(group.confidence * 100)}%`
-                          : "—";
-                      const isAuto = lastResult?.autoSelectGroupId === group.id;
-                      const isManual = manualGroupId === group.id;
-                      const isApplied = isAuto || isManual;
-                        const isExpanded = expandedGroups[group.id] ?? false;
-                        const hasExtra = entries.length > 3;
-                        const hiddenCount = Math.max(0, entries.length - 3);
-                        const visibleEntries = isExpanded || !hasExtra
-                          ? entries
-                          : entries.slice(0, 3);
-                      return (
-                        <article
-                          key={group.id}
-                          className="flex h-[16rem] flex-col rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <span className="inline-flex max-w-full truncate rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">
-                              {group.label ?? group.id}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] text-slate-500">
-                                置信度 {confidence}
-                              </span>
-                              <button
-                                type="button"
-                                className={`assistant-check ${
-                                  isApplied ? "assistant-check--active" : ""
-                                }`}
-                                onClick={() => handleApplyGroupFromAssistant(group)}
-                                disabled={isApplied}
-                                aria-label="使用此分组回填"
-                              >
-                                {isApplied ? (
-                                  <span className="i-material-symbols-check-rounded text-base" />
-                                ) : (
-                                  <span className="inline-block h-2 w-2 rounded-full bg-indigo-300" />
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                          <div className="relative mt-2 flex-1">
-                            {visibleEntries.length ? (
-                              <div
-                                className={`pr-1 transition-[max-height] duration-300 ease-out ${
-                                  isExpanded || !hasExtra
-                                    ? "max-h-full overflow-y-auto"
-                                    : "max-h-24 overflow-hidden"
-                                }`}
-                              >
-                                <ul className="space-y-1 text-xs text-slate-600">
-                                  {visibleEntries.map((entry) => {
-                                    const normalized = entry.value
-                                      .trim()
-                                      .toLowerCase();
-                                    const isDuplicate = duplicateValues.has(
-                                      normalized
-                                    );
-                                    return (
-                                      <li
-                                        key={`${group.id}-${entry.fieldId}`}
-                                        className="flex flex-col"
-                                      >
-                                        <span className="text-[11px] text-slate-400">
-                                          {entry.label}
-                                        </span>
-                                        <span
-                                          className={`font-medium ${
-                                            isDuplicate
-                                              ? "text-amber-600"
-                                              : "text-slate-800"
-                                          }`}
-                                        >
-                                          {entry.value}
-                                          {entry.confidence != null ? (
-                                            <span className="ml-1 text-[10px] text-slate-400">
-                                              {Math.round(
-                                                (entry.confidence ?? 0) * 100
-                                              )}
-                                              %
-                                            </span>
-                                          ) : null}
-                                        </span>
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                              </div>
-                            ) : (
-                              <p className="mt-2 text-xs text-slate-400">
-                                暂无可展示字段
-                              </p>
-                            )}
-                            {!isExpanded && hasExtra ? (
-                              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 rounded-b-2xl bg-gradient-to-t from-white/95 via-white/70 to-transparent" />
-                            ) : null}
-                          </div>
-                          {hasExtra ? (
-                            <button
-                              type="button"
-                              className="mt-2 text-[11px] text-indigo-600 underline-offset-2 hover:underline"
-                              onClick={() => toggleGroupExpand(group.id)}
-                            >
-                              {isExpanded
-                                ? "收起其他字段"
-                                : `展开其余 ${hiddenCount} 个字段`}
-                            </button>
-                          ) : null}
-                        </article>
-                      );
-                    })}
-                    </div>
-                  </div>
-                ) : null}
+                <TaskList
+                  tasks={tasks}
+                  activeTaskId={activeTaskId}
+                  activeElapsedMs={elapsedMs}
+                  onSelectTask={handleSelectTask}
+                  onClear={() => {
+                    clearTasks();
+                    setActiveTaskId(null);
+                    setActiveResult(null);
+                    setManualGroupId(null);
+                    setError(null);
+                    setPending(false);
+                    stopTimer();
+                  }}
+                />
+                <ResultSection
+                  previews={groupPreviews}
+                  manualGroupId={manualGroupId}
+                  sourceLabel={lastSubmissionRef.current?.label ?? undefined}
+                  canRetry={Boolean(lastSubmissionRef.current)}
+                  pending={pending}
+                  onRetry={() => {
+                    void handleRetry();
+                  }}
+                  onApply={handleApplyGroupFromAssistant}
+                />
               </div>
-              <div className="chat-input">
-                {pendingFile ? (
-                  <div className="mb-2 text-xs text-slate-700">
-                    已选择文件：<strong>{pendingFile.name}</strong>
-                    <button
-                      type="button"
-                      className="ml-2 text-indigo-700 underline"
-                      onClick={() => setPendingFile(null)}
-                    >
-                      移除
-                    </button>
-                  </div>
-                ) : null}
-                <div
-                  className={`assistant-input-wrap ${
-                    dragActive
-                      ? "ring-3 ring-indigo-400/45 border-indigo-400/60"
-                      : ""
-                  }`}
-                  aria-busy={pending}
-                >
-                  <button
-                    type="button"
-                    className="assistant-circle"
-                    title="添加内容或选择文件"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={pending}
-                    aria-label="添加"
-                  >
-                    <span className="i-material-symbols-add-rounded text-lg" />
-                  </button>
-                  <textarea
-                    ref={textareaRef}
-                    className="assistant-textarea"
-                    rows={1}
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder="输入你的问题，或将文件粘贴/拖拽到这里"
-                    onPaste={onPaste}
-                    onDrop={onDrop}
-                    onDragOver={onDragOver}
-                    onDragLeave={onDragLeave}
-                    onKeyDown={onKeyDown}
-                    disabled={pending}
-                  />
-                  {dragActive ? (
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                      <span className="px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-700 text-xs border border-indigo-400/40">
-                        松开以上传文件
-                      </span>
-                    </div>
-                  ) : null}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    accept={ACCEPT_ATTRIBUTE_VALUE}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handleSelectFile(f);
-                      e.currentTarget.value = "";
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="assistant-circle assistant-circle--primary"
-                    title="提交分析"
-                    onClick={handleSubmit}
-                    disabled={pending}
-                    aria-label="发送"
-                  >
-                    {pending ? (
-                      <span className="i-line-md:loading-twotone-loop text-white text-lg" />
-                    ) : (
-                      <span className="i-material-symbols-send-rounded text-white text-lg" />
-                    )}
-                  </button>
-                </div>
-              </div>
+              <AssistantInputArea
+                pending={pending}
+                pendingFile={pendingFile}
+                inputText={inputText}
+                dragActive={dragActive}
+                textareaRef={textareaRef}
+                fileInputRef={fileInputRef}
+                onInputChange={setInputText}
+                onPaste={onPaste}
+                onDrop={onDrop}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onKeyDown={onKeyDown}
+                onSelectFileClick={() => fileInputRef.current?.click()}
+                onFileChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleSelectFile(f);
+                }}
+                onRemoveFile={() => setPendingFile(null)}
+                onSubmit={() => {
+                  void handleSubmit();
+                }}
+              />
             </div>,
             document.body
           )

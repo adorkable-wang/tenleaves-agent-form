@@ -23,6 +23,9 @@ pnpm agent:server
 
 # 启动前端
 pnpm dev
+
+# 开发阶段建议同时执行类型检查
+pnpm typecheck
 ```
 
 > 说明：**不配置 `LLM_TIMEOUT_ENABLED` 时表示关闭超时检测**，即请求将一直等待 DashScope 的响应；只有在将其设为 `true` 时，`LLM_TIMEOUT_MS` 的数值才会生效，可按需调整毫秒值。
@@ -66,7 +69,7 @@ pnpm dev
   - 文本问题输入；
   - 文件拖拽/粘贴/选择（受支持格式见 `SUPPORTED_FORMAT_LABEL`）。
 - 识别结果按字段/组合自动回填表单；你可以在表单内继续编辑。
-- 分析过程提供“乐观进度”与用时展示：解析文件 → 准备请求 → 等待模型响应 → 解析回填（组件：`src/components/AssistantProgress.tsx`）。
+- 分析过程提供“乐观进度”与用时展示：解析文件 → 准备请求 → 等待模型响应 → 解析回填（由任务列表 `src/components/assistant/TaskList.tsx` 集成进度条与状态徽章）。
 - LLM 返回的字段/候选会附带 `confidence`，服务端仅保留置信度 ≥ 75% 的条目，并按置信度降序排序。
 
 ## 可复用（npm 准备）
