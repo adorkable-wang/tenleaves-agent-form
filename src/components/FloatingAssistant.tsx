@@ -49,7 +49,7 @@ type GroupPreview = {
     value: string;
     confidence?: number;
   }>;
-  extraCount: number;
+  duplicateValues: Set<string>;
 };
 
 interface Props {
@@ -76,6 +76,8 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
   const startAtRef = useRef<number | null>(null);
   const lastSubmissionRef = useRef<{ docPayload: AgentDocument; label: string } | null>(null);
   const [lastResult, setLastResult] = useState<AgentAnalyzeResult | null>(null);
+  const [manualGroupId, setManualGroupId] = useState<string | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   // 引用与拖拽状态
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -238,13 +240,29 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
           };
         })
         .filter((item): item is NonNullable<typeof item> => Boolean(item));
+      const counts = new Map<string, number>();
+      orderedEntries.forEach((entry) => {
+        const normalized = entry.value.trim().toLowerCase();
+        counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+      });
+      const duplicateValues = new Set<string>();
+      counts.forEach((count, key) => {
+        if (count > 1) duplicateValues.add(key);
+      });
       return {
         group,
-        entries: orderedEntries.slice(0, 3),
-        extraCount: Math.max(0, orderedEntries.length - 3),
+        entries: orderedEntries,
+        duplicateValues,
       };
     });
   }, [lastResult, fieldLabelMap, formFieldOrder]);
+
+  const toggleGroupExpand = useCallback((groupId: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }));
+  }, []);
 
   const executeAnalysis = useCallback(
     async (docPayload: AgentDocument) => {
@@ -256,6 +274,8 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
         formSchema: schema,
       });
       setLastResult(result);
+      setManualGroupId(null);
+      setExpandedGroups({});
       updateSteps({
         await: { status: "done" },
         apply: { status: "active" },
@@ -372,6 +392,8 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
       const values = buildValuesFromGroup(group);
       if (!Object.keys(values).length) return;
       onApply(values, lastResult);
+      setManualGroupId(group.id);
+      setExpandedGroups((prev) => ({ ...prev, [group.id]: true }));
       addMsg(
         "assistant",
         `已使用分组「${group.label ?? group.id}」回填表单。`
@@ -523,150 +545,167 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                   ✕
                 </button>
               </div>
-              {/* 进度条仅在处理中显示 */}
-              {pending ? (
-                <AssistantProgress
-                  steps={progressSteps}
-                  elapsedMs={elapsedMs}
-                />
-              ) : null}
-              <div
-                className="chat-messages"
-                aria-live="polite"
-                ref={messagesRef}
-              >
-                {messages.length === 0 ? (
-                  <p className="subtle">在下方输入文本或上传文件开始分析。</p>
-                ) : (
-                  messages.map((m) => {
-                    const time = new Date(m.ts).toLocaleTimeString();
-                    const isUser = m.role === "user";
-                    const avatar = isUser
-                      ? "🧑"
-                      : m.role === "assistant"
-                      ? "🤖"
-                      : "ℹ️";
-                    return (
-                      <div
-                        key={m.id}
-                        className={`chat-row ${
-                          isUser ? "self-end flex-row-reverse" : "self-start"
-                        }`}
-                      >
-                        <div className={`chat-line chat-line--${m.role}`}>
-                          <pre>{m.content}</pre>
-                        </div>
-                        <div className="chat-meta">
-                          <div className="chat-avatar" aria-hidden>
-                            {avatar}
+              <div className="assistant-body">
+                {pending ? (
+                  <AssistantProgress
+                    steps={progressSteps}
+                    elapsedMs={elapsedMs}
+                  />
+                ) : null}
+                <div
+                  className="chat-messages"
+                  aria-live="polite"
+                  ref={messagesRef}
+                >
+                  {messages.length === 0 ? (
+                    <p className="subtle">在下方输入文本或上传文件开始分析。</p>
+                  ) : (
+                    messages.map((m) => {
+                      const time = new Date(m.ts).toLocaleTimeString();
+                      const isUser = m.role === "user";
+                      const avatar = isUser
+                        ? "🧑"
+                        : m.role === "assistant"
+                        ? "🤖"
+                        : "ℹ️";
+                      return (
+                        <div
+                          key={m.id}
+                          className={`chat-row ${
+                            isUser ? "self-end flex-row-reverse" : "self-start"
+                          }`}
+                        >
+                          <div className={`chat-line chat-line--${m.role}`}>
+                            <pre>{m.content}</pre>
                           </div>
-                          <span className="chat-time">{time}</span>
+                          <div className="chat-meta">
+                            <div className="chat-avatar" aria-hidden>
+                              {avatar}
+                            </div>
+                            <span className="chat-time">{time}</span>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-              {error ? (
-                <p className="error mt-2">
-                  {error}
-                  {lastSubmissionRef.current ? (
-                    <button
-                      type="button"
-                      className="ml-2 text-indigo-700 underline disabled:opacity-50"
-                      onClick={handleRetry}
-                      disabled={pending}
-                    >
-                      重试
-                    </button>
-                  ) : null}
-                </p>
-              ) : null}
-              {groupPreviews.length ? (
-                <div className="mt-3 space-y-3 border-t border-slate-200/70 pt-3">
-                  <p className="text-xs text-slate-500">
-                    {lastResult?.autoSelectGroupId
-                      ? "已自动套用置信度最高的分组，如需调整可改用以下分组："
-                      : "存在多个候选分组，请选择最合适的一组回填："}
+                      );
+                    })
+                  )}
+                </div>
+                {error ? (
+                  <p className="error mt-0 text-sm">
+                    {error}
+                    {lastSubmissionRef.current ? (
+                      <button
+                        type="button"
+                        className="ml-2 text-indigo-700 underline disabled:opacity-50"
+                        onClick={handleRetry}
+                        disabled={pending}
+                      >
+                        重试
+                      </button>
+                    ) : null}
                   </p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {groupPreviews.map(({ group, entries, extraCount }) => {
+                ) : null}
+                {groupPreviews.length ? (
+                  <div className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                    {groupPreviews.map(({ group, entries, duplicateValues }) => {
                       const confidence =
                         group.confidence != null
                           ? `${Math.round(group.confidence * 100)}%`
                           : "—";
                       const isAuto = lastResult?.autoSelectGroupId === group.id;
-                      return (
-                        <article
-                          key={group.id}
-                          className="flex h-full flex-col rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-[11px] text-slate-500">分组</p>
-                              <p className="text-sm font-semibold text-slate-900">
-                                {group.label ?? group.id}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-[11px] text-slate-500">置信度</p>
-                              <p className="text-base font-semibold text-indigo-600">
-                                {confidence}
-                              </p>
-                            </div>
-                          </div>
-                          {entries.length ? (
-                            <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                              {entries.map((entry) => (
-                                <li key={`${group.id}-${entry.fieldId}`}>
-                                  <span className="font-medium text-slate-800">
-                                    {entry.label}
-                                  </span>
-                                  ：{entry.value}
-                                  {entry.confidence != null ? (
-                                    <span className="text-slate-400">
-                                      {" "}
-                                      · {Math.round((entry.confidence ?? 0) * 100)}%
-                                    </span>
-                                  ) : null}
-                                </li>
-                              ))}
-                              {extraCount > 0 ? (
-                                <li className="text-slate-400">
-                                  +{extraCount} 个其他字段
-                                </li>
-                              ) : null}
-                            </ul>
-                          ) : (
-                            <p className="mt-2 text-xs text-slate-400">
-                              暂无可展示字段
-                            </p>
-                          )}
-                          <div className="mt-3 flex items-center justify-between gap-2 pt-2">
-                            {isAuto ? (
-                              <span className="rounded-full bg-emerald-100 px-3 py-1 text-[11px] text-emerald-700">
-                                已自动回填
-                              </span>
+                      const isManual = manualGroupId === group.id;
+                      const isApplied = isAuto || isManual;
+                      const isExpanded = expandedGroups[group.id] ?? false;
+                      const visibleEntries = isExpanded
+                        ? entries
+                        : entries.slice(0, 3);
+                        const hiddenCount = Math.max(
+                          0,
+                          entries.length - visibleEntries.length
+                        );
+                        return (
+                          <article
+                            key={group.id}
+                            className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm"
+                          >
+                            <span className="inline-flex max-w-full truncate rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                              {group.label ?? group.id}
+                            </span>
+                            {visibleEntries.length ? (
+                              <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                                {visibleEntries.map((entry) => {
+                                  const normalized = entry.value
+                                    .trim()
+                                    .toLowerCase();
+                                  const isDuplicate = duplicateValues.has(
+                                    normalized
+                                  );
+                                  return (
+                                    <li
+                                      key={`${group.id}-${entry.fieldId}`}
+                                      className="flex flex-col"
+                                    >
+                                      <span className="text-[11px] text-slate-400">
+                                        {entry.label}
+                                      </span>
+                                      <span
+                                        className={`font-medium ${
+                                          isDuplicate
+                                            ? "text-amber-600"
+                                            : "text-slate-800"
+                                        }`}
+                                      >
+                                        {entry.value}
+                                        {entry.confidence != null ? (
+                                          <span className="ml-1 text-[10px] text-slate-400">
+                                            {Math.round(
+                                              (entry.confidence ?? 0) * 100
+                                            )}
+                                            %
+                                          </span>
+                                        ) : null}
+                                      </span>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
                             ) : (
-                              <span className="text-[11px] text-slate-500">
-                                确认后将覆盖当前表单值
-                              </span>
+                              <p className="mt-2 text-xs text-slate-400">
+                                暂无可展示字段
+                              </p>
                             )}
-                            <button
-                              type="button"
-                              className="inline-flex items-center rounded-full border border-indigo-200 px-3 py-1 text-xs font-medium text-indigo-700 transition hover:bg-indigo-50 disabled:opacity-40"
-                              onClick={() => handleApplyGroupFromAssistant(group)}
-                              disabled={isAuto}
-                            >
-                              使用此分组
-                            </button>
-                          </div>
-                        </article>
-                      );
-                    })}
+                            {hiddenCount > 0 ? (
+                              <button
+                                type="button"
+                                className="mt-2 text-[11px] text-indigo-600 underline-offset-2 hover:underline"
+                                onClick={() => toggleGroupExpand(group.id)}
+                              >
+                                {isExpanded
+                                  ? "收起其他字段"
+                                  : `展开其余 ${hiddenCount} 个字段`}
+                              </button>
+                            ) : null}
+                            <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
+                              <span>置信度 {confidence}</span>
+                              <button
+                                type="button"
+                                className={`assistant-check ${
+                                  isApplied ? "assistant-check--active" : ""
+                                }`}
+                                onClick={() => handleApplyGroupFromAssistant(group)}
+                                disabled={isApplied}
+                                aria-label="使用此分组回填"
+                              >
+                                <span className="i-material-symbols-check-rounded text-base" />
+                              </button>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
               <div className="chat-input">
                 {pendingFile ? (
                   <div className="mb-2 text-xs text-slate-700">

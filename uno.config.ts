@@ -40,10 +40,11 @@ export default defineConfig({
     // floating assistant toggle button (icon-only)
     'assistant-toggle': 'fixed right-6 bottom-6 z-50 h-14 w-14 rounded-full grid place-items-center bg-gradient-to-tr from-indigo-500 to-violet-500 text-white shadow-lg shadow-violet-500/40 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 transition-all',
     'assistant-toggle--open': 'from-violet-500 to-indigo-500 rotate-6',
-    'assistant-dialog': 'fixed right-6 bottom-20 w-96 max-w-[92vw] max-h-[72vh] p-0 rounded-2xl bg-white/95 border border-slate-200/70 ring-1 ring-slate-200/60 shadow-2xl shadow-slate-900/10 backdrop-blur-xl grid grid-rows-[auto_1fr_auto] overflow-hidden transition-all duration-200 ease-out origin-bottom-right',
+    'assistant-dialog': 'fixed right-6 bottom-20 w-[32rem] max-w-[96vw] max-h-[82vh] rounded-3xl bg-white/97 border border-slate-200/70 ring-1 ring-slate-200/60 shadow-2xl shadow-slate-900/10 backdrop-blur-xl grid grid-rows-[auto_1fr_auto] overflow-hidden transition-all duration-200 ease-out origin-bottom-right',
     'assistant-header': 'flex items-center justify-between px-4 py-3 bg-gradient-to-r from-indigo-50 to-violet-50 border-b border-slate-200/70',
     'assistant-close': 'px-2 py-1 rounded text-slate-600 hover:bg-slate-200/60 transition-colors',
-    'chat-messages': 'overflow-y-auto p-3 space-y-2 bg-slate-50/70 text-sm scroll-smooth flex flex-col',
+    'assistant-body': 'min-h-0 overflow-y-auto px-5 py-4 bg-slate-50/70 flex flex-col gap-3',
+    'chat-messages': 'flex flex-col gap-2 text-sm text-slate-800 leading-relaxed scroll-smooth',
     'chat-row': 'w-full flex items-end gap-2',
     'chat-line': 'px-3 py-2 rounded-2xl whitespace-pre-wrap break-words max-w-[75%] shadow-sm',
     'chat-line--user': 'self-end bg-indigo-500 text-white shadow-indigo-500/20',
@@ -57,5 +58,7 @@ export default defineConfig({
     'assistant-textarea': 'flex-1 resize-none max-h-36 min-h-[1.75rem] leading-6 bg-transparent outline-none border-none px-1 py-0 text-slate-900 placeholder:(text-slate-400)',
     'assistant-circle': 'h-9 w-9 rounded-full flex items-center justify-center text-slate-600 bg-white/80 border border-slate-300/60 hover:(bg-slate-200/70) transition-colors',
     'assistant-circle--primary': 'bg-indigo-500 border-indigo-500 text-white hover:bg-indigo-600',
+    'assistant-check': 'h-10 w-10 rounded-full border border-indigo-200 bg-white/90 text-indigo-600 flex items-center justify-center transition-all duration-200 hover:(border-indigo-400 bg-indigo-50)',
+    'assistant-check--active': 'bg-emerald-100 border-emerald-400 text-emerald-700 scale-110 shadow-inner shadow-emerald-400/40',
   },
 })
