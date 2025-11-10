@@ -13,7 +13,11 @@ import React, {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import type { AgentAnalyzeResult, AgentFormField } from "../agent";
+import type {
+  AgentAnalyzeResult,
+  AgentDocument,
+  AgentFormField,
+} from "../agent";
 import { analyzeDocumentWithDefaultAgent } from "../agent";
 import {
   parseFileToAgentDocument,
@@ -57,6 +61,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
   const [elapsedMs, setElapsedMs] = useState(0);
   const tickRef = useRef<number | null>(null);
   const startAtRef = useRef<number | null>(null);
+  const lastSubmissionRef = useRef<{ docPayload: AgentDocument; label: string } | null>(null);
   // 引用与拖拽状态
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -79,12 +84,12 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
     });
   };
 
-  const addMsg = (role: ChatMsg["role"], content: string) => {
+  const addMsg = useCallback((role: ChatMsg["role"], content: string) => {
     setMessages((prev) => [
       ...prev,
       { id: String(Date.now()) + Math.random(), role, content, ts: Date.now() },
     ]);
-  };
+  }, []);
 
   const computeInitialFillValuesFromResult = useCallback(
     (result: AgentAnalyzeResult) => chooseInitialValuesFromResult(result),
@@ -118,81 +123,59 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
     return lines.join("\n");
   };
 
-  const handleSubmit = useCallback(async () => {
-    const file = pendingFile;
-    const text = inputText.trim();
-    if (!file && !text) return;
-    setPending(true);
-    setError(null);
-    // 初始化进度
-    const steps: ProgressStep[] = [
-      {
-        id: "parse",
-        label: file ? "解析文件" : "准备内容",
-        status: file ? "active" : "done",
-      },
-      { id: "prepare", label: "准备请求", status: file ? "pending" : "active" },
-      { id: "await", label: "等待模型响应", status: "pending" },
-      { id: "apply", label: "解析回填", status: "pending" },
-    ];
-    setProgressSteps(steps);
-    // 启动计时
+  const startTimer = useCallback(() => {
     startAtRef.current = Date.now();
     setElapsedMs(0);
     if (tickRef.current) window.clearInterval(tickRef.current);
     tickRef.current = window.setInterval(() => {
-      if (startAtRef.current) setElapsedMs(Date.now() - startAtRef.current);
-    }, 200);
-    try {
-      addMsg("user", file ? `上传文件：${file.name}` : text);
-      // 解析文件 / 准备内容
-      let docPayload: { kind: "text"; content: string; filename?: string };
-      if (file) {
-        const parsed = await parseFileToAgentDocument(file);
-        // 更新解析步骤为完成，并激活准备请求
-        setProgressSteps((prev) =>
-          prev.map((s) =>
-            s.id === "parse"
-              ? { ...s, status: "done", detail: parsed.formatLabel }
-              : s.id === "prepare"
-              ? { ...s, status: "active" }
-              : s
-          )
-        );
-        docPayload = parsed.document;
-      } else {
-        docPayload = {
-          kind: "text",
-          content: text,
-          filename: "input.txt",
-        } as const;
+      if (startAtRef.current) {
+        setElapsedMs(Date.now() - startAtRef.current);
       }
-      // 准备请求完成，进入等待模型响应
-      setProgressSteps((prev) =>
-        prev.map((s) =>
-          s.id === "prepare"
-            ? { ...s, status: "done" }
-            : s.id === "await"
-            ? { ...s, status: "active" }
-            : s
-        )
-      );
-      const result = await analyzeDocumentWithDefaultAgent(docPayload, {
-        formSchema: schema,
-      });
-      // 模型响应返回
-      setProgressSteps((prev) =>
-        prev.map((s) =>
-          s.id === "await"
-            ? { ...s, status: "done" }
-            : s.id === "apply"
-            ? { ...s, status: "active" }
-            : s
-        )
-      );
+    }, 200);
+  }, []);
+
+  const stopTimer = useCallback(() => {
+    if (tickRef.current) {
+      window.clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
+  }, []);
+
+  const buildInitialSteps = useCallback(
+    (mode: "file" | "text" | "retry", detail?: string): ProgressStep[] => {
+      const parseLabel =
+        mode === "file" ? "解析文件" : mode === "retry" ? "复用内容" : "准备内容";
+      const parseStatus = mode === "file" ? "active" : "done";
+      const parseDetail =
+        detail ??
+        (mode === "retry"
+          ? "沿用上次内容"
+          : mode === "text"
+          ? "文本输入"
+          : undefined);
+      const prepareStatus = mode === "file" ? "pending" : "active";
+      return [
+        { id: "parse", label: parseLabel, status: parseStatus, detail: parseDetail },
+        { id: "prepare", label: "准备请求", status: prepareStatus },
+        { id: "await", label: "等待模型响应", status: "pending" },
+        { id: "apply", label: "解析回填", status: "pending" },
+      ];
+    },
+    []
+  );
+
+  const updateSteps = useCallback((updates: Partial<Record<string, Partial<ProgressStep>>>) => {
+    setProgressSteps((prev) =>
+      prev.map((step) =>
+        updates[step.id] ? { ...step, ...updates[step.id]! } : step
+      )
+    );
+  }, []);
+
+  const applyResultToForm = useCallback(
+    (result: AgentAnalyzeResult) => {
       const values = computeInitialFillValuesFromResult(result);
       onApply(values, result);
-      // 表单联动：高亮已填充的表单字段，并派发自定义事件
       try {
         for (const [fieldId] of Object.entries(values)) {
           const input = window.document.querySelector<HTMLElement>(
@@ -208,40 +191,132 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
         }
         emitAutofillEvent(values, result.backend);
       } catch {
-        /* empty */
+        /* noop */
       }
-
-      // 解析回填完成
-      setProgressSteps((prev) =>
-        prev.map((s) => (s.id === "apply" ? { ...s, status: "done" } : s))
-      );
-      addMsg("assistant", formatAssistantSummary(result));
       setInputText("");
       setPendingFile(null);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "智能体处理失败";
-      setError(msg);
-      // 将当前 active 步骤标记为 error
+    },
+    [computeInitialFillValuesFromResult, onApply, setInputText, setPendingFile]
+  );
+
+  const executeAnalysis = useCallback(
+    async (docPayload: AgentDocument) => {
+      updateSteps({
+        prepare: { status: "done" },
+        await: { status: "active" },
+      });
+      const result = await analyzeDocumentWithDefaultAgent(docPayload, {
+        formSchema: schema,
+      });
+      updateSteps({
+        await: { status: "done" },
+        apply: { status: "active" },
+      });
+      applyResultToForm(result);
+      updateSteps({
+        apply: { status: "done" },
+      });
+      addMsg("assistant", formatAssistantSummary(result));
+    },
+    [schema, updateSteps, applyResultToForm, addMsg]
+  );
+
+  const beginWorkflow = useCallback(
+    (mode: "file" | "text" | "retry", detail?: string) => {
+      setProgressSteps(buildInitialSteps(mode, detail));
+      startTimer();
+    },
+    [buildInitialSteps, startTimer]
+  );
+
+  const handleAnalysisError = useCallback(
+    (message: string) => {
+      setError(message);
       setProgressSteps((prev) =>
         prev.map((s) =>
-          s.status === "active" ? { ...s, status: "error", detail: msg } : s
+          s.status === "active"
+            ? {
+                ...s,
+                status: "error",
+                detail: message,
+              }
+            : s
         )
       );
-      addMsg("assistant", `出错：${msg}`);
+      addMsg("assistant", `出错：${message}`);
+    },
+    [addMsg]
+  );
+
+  const handleSubmit = useCallback(async () => {
+    if (pending) return;
+    const file = pendingFile;
+    const text = inputText.trim();
+    if (!file && !text) return;
+    setPending(true);
+    setError(null);
+    const mode = file ? "file" : "text";
+    beginWorkflow(mode, file ? undefined : "文本输入");
+    try {
+      addMsg("user", file ? `上传文件：${file.name}` : text);
+      let docPayload: AgentDocument;
+      // 解析文件 / 准备内容
+      if (file) {
+        const parsed = await parseFileToAgentDocument(file);
+        // 更新解析步骤为完成，并激活准备请求
+        updateSteps({
+          parse: { status: "done", detail: parsed.formatLabel },
+          prepare: { status: "active" },
+        });
+        docPayload = parsed.document;
+      } else {
+        docPayload = {
+          kind: "text",
+          content: text,
+          filename: "input.txt",
+        } as const;
+      }
+      lastSubmissionRef.current = {
+        docPayload,
+        label: file ? file.name : "文本输入",
+      };
+      await executeAnalysis(docPayload);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "智能体处理失败";
+      handleAnalysisError(msg);
     } finally {
       setPending(false);
-      if (tickRef.current) {
-        window.clearInterval(tickRef.current);
-        tickRef.current = null;
-      }
+      stopTimer();
     }
   }, [
+    pending,
     inputText,
-    schema,
-    computeInitialFillValuesFromResult,
-    onApply,
     pendingFile,
+    beginWorkflow,
+    updateSteps,
+    executeAnalysis,
+    handleAnalysisError,
+    stopTimer,
+    addMsg,
   ]);
+
+  const handleRetry = useCallback(async () => {
+    if (pending) return;
+    const last = lastSubmissionRef.current;
+    if (!last) return;
+    setPending(true);
+    setError(null);
+    beginWorkflow("retry", last.label);
+    try {
+      await executeAnalysis(last.docPayload);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "智能体处理失败";
+      handleAnalysisError(msg);
+    } finally {
+      setPending(false);
+      stopTimer();
+    }
+  }, [pending, beginWorkflow, executeAnalysis, handleAnalysisError, stopTimer]);
 
   const buttonLabel = useMemo(() => (open ? "关闭助手" : "打开助手"), [open]);
 
@@ -430,7 +505,21 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                   })
                 )}
               </div>
-              {error ? <p className="error mt-2">{error}</p> : null}
+              {error ? (
+                <p className="error mt-2">
+                  {error}
+                  {lastSubmissionRef.current ? (
+                    <button
+                      type="button"
+                      className="ml-2 text-indigo-700 underline disabled:opacity-50"
+                      onClick={handleRetry}
+                      disabled={pending}
+                    >
+                      重试
+                    </button>
+                  ) : null}
+                </p>
+              ) : null}
               <div className="chat-input">
                 {pendingFile ? (
                   <div className="mb-2 text-xs text-slate-700">
