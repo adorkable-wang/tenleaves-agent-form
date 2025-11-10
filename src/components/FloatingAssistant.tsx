@@ -617,7 +617,11 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                                 disabled={isApplied}
                                 aria-label="使用此分组回填"
                               >
-                                <span className="i-material-symbols-check-rounded text-base" />
+                                {isApplied ? (
+                                  <span className="i-material-symbols-check-rounded text-base" />
+                                ) : (
+                                  <span className="inline-block h-2 w-2 rounded-full bg-indigo-300" />
+                                )}
                               </button>
                             </div>
                           </div>

@@ -58,7 +58,7 @@ export default defineConfig({
     'assistant-textarea': 'flex-1 resize-none max-h-36 min-h-[1.75rem] leading-6 bg-transparent outline-none border-none px-1 py-0 text-slate-900 placeholder:(text-slate-400)',
     'assistant-circle': 'h-9 w-9 rounded-full flex items-center justify-center text-slate-600 bg-white/80 border border-slate-300/60 hover:(bg-slate-200/70) transition-colors',
     'assistant-circle--primary': 'bg-indigo-500 border-indigo-500 text-white hover:bg-indigo-600',
-    'assistant-check': 'h-10 w-10 rounded-full border border-indigo-200 bg-white/90 text-indigo-600 flex items-center justify-center transition-all duration-200 hover:(border-indigo-400 bg-indigo-50)',
-    'assistant-check--active': 'bg-emerald-100 border-emerald-400 text-emerald-700 scale-110 shadow-inner shadow-emerald-400/40',
+    'assistant-check': 'h-8 w-8 rounded-full border border-indigo-200 bg-white/90 text-transparent flex items-center justify-center transition-all duration-200 hover:(border-indigo-400 bg-indigo-50)',
+    'assistant-check--active': 'bg-gradient-to-br from-emerald-400 to-emerald-500 border-emerald-500 text-white scale-110 shadow-lg shadow-emerald-400/50',
   },
 })
