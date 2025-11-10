@@ -5,7 +5,7 @@ import type {
   AgentAnalyzeOptions,
   AgentAnalyzeResult,
   AgentDocument,
-} from "../../src/agent";
+} from "../../shared/agent-types";
 import { buildPrompt } from "../services/prompt";
 import { sendDashscope } from "../services/llm/dashscopeClient";
 import { extractPayload, normalizeAgentResult } from "../services/normalize";
@@ -72,7 +72,6 @@ agentRouter.post(
       if (isAbortError(error)) {
         return res.status(504).json({ error: "上游模型请求超时，请稍后重试" });
       }
-      console.error(error);
       res.status(500).json({
         error: error instanceof Error ? error.message : "LLM 调用异常",
       });

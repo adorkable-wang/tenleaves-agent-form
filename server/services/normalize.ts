@@ -3,59 +3,16 @@ import type {
   AgentFieldGroup,
   AgentFieldOption,
   AgentFormField,
-} from "../../src/agent";
+} from "../../shared/agent-types";
 import { DASHSCOPE_MODEL } from "../config";
+import { extractPayload as extractPayloadImpl } from "./normalize/json";
+import {
+  clampConfidence,
+  MIN_CONFIDENCE,
+  normalizeOptions,
+} from "./normalize/options";
 
-type DashscopeMessage = {
-  role: "assistant" | "system";
-  content?: string | unknown[];
-};
-
-// 统一的置信度常量，便于集中调整阈值
-const MIN_CONFIDENCE = 0.75;
-const OPTION_CONF_CAP = 0.85;
-const OPTION_CONF_BASE = 0.65;
-
-export function extractPayload(
-  content: DashscopeMessage["content"]
-): Record<string, unknown> {
-  if (!content) return {};
-  if (typeof content === "string") {
-    const trimmed = content.trim();
-    if (!trimmed) return {};
-    // 优先从文本中“提取 JSON”（去围栏/截取第一个 JSON 片段/宽松修复）
-    const parsed = extractJsonFromText(trimmed) ?? tryParseJSON(trimmed);
-    if (parsed && typeof parsed === "object") {
-      return ensureStructure(parsed as Record<string, unknown>);
-    }
-    return ensureStructure({ summary: trimmed });
-  }
-  if (Array.isArray(content)) {
-    const concatenated = content
-      .map((chunk) => {
-        if (typeof chunk === "string") return chunk;
-        if (chunk && typeof chunk === "object" && "text" in chunk) {
-          return typeof (chunk as { text?: string }).text === "string"
-            ? (chunk as { text?: string }).text
-            : "";
-        }
-        return "";
-      })
-      .join("")
-      .trim();
-    if (!concatenated) return {};
-    const parsed =
-      extractJsonFromText(concatenated) ?? tryParseJSON(concatenated);
-    if (parsed && typeof parsed === "object") {
-      return ensureStructure(parsed as Record<string, unknown>);
-    }
-    return ensureStructure({ summary: concatenated });
-  }
-  if (typeof content === "object") {
-    return ensureStructure(content as Record<string, unknown>);
-  }
-  return ensureStructure({});
-}
+export { extractPayloadImpl as extractPayload };
 
 export function normalizeAgentResult(
   payload: Record<string, unknown>,
@@ -95,11 +52,13 @@ export function normalizeAgentResult(
         )
     : [];
 
-  const rawGroups = Array.isArray(
+  let rawGroups = Array.isArray(
     (payload as Record<string, unknown>).fieldGroups
   )
     ? (payload as { fieldGroups: unknown[] }).fieldGroups
     : [];
+
+  rawGroups = coalesceFieldLevelGroups(rawGroups, formSchema);
 
   const normalizedGroups = rawGroups
     .map((item, index) => normalizeGroup(item, index, formSchema.length))
@@ -112,9 +71,6 @@ export function normalizeAgentResult(
 
   const fieldGroups = normalizedGroups.map((item) => item.group);
 
-  const autoSelectGroupId =
-    fieldGroups.length === 1 ? fieldGroups[0].id : null;
-
   return {
     backend,
     summary,
@@ -122,7 +78,6 @@ export function normalizeAgentResult(
     extractedPairs,
     actions,
     fieldGroups,
-    autoSelectGroupId,
   };
 }
 
@@ -143,184 +98,6 @@ function normalizeAction(item: unknown) {
     typeof record.rationale === "string" ? record.rationale : undefined;
   if (!type) return null;
   return { type, target, payload, confidence, rationale };
-}
-
-function clampConfidence(n: number) {
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(1, n));
-}
-
-function tryParseJSON(text: string) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 从“非严格 JSON 文本”中提取可解析的 JSON：
- * 1) 去掉 ```json ... ``` 的代码块围栏后尝试解析；
- * 2) 在长文本中定位第一个对象/数组片段（括号计数匹配）并解析；
- * 3) 宽松修复：
- *    - 为未加引号的键名补引号；
- *    - 将成对的单引号字符串替换为双引号；
- * 注意：此方法是“尽力而为”的容错，可能无法覆盖所有边界，但能显著提升解析成功率。
- */
-function extractJsonFromText(text: string): unknown | null {
-  const fenced = matchCodeFence(text);
-  if (fenced) {
-    const parsed = tryParseJSON(fenced);
-    if (parsed != null) return parsed;
-  }
-
-  const jsonSlice = findFirstJsonSlice(text);
-  if (jsonSlice) {
-    const parsed = tryParseJSON(jsonSlice);
-    if (parsed != null) return parsed;
-  }
-
-  // 宽松修复：仅在原文包含看似 JSON 的符号时尝试
-  if (text.includes("{") || text.includes("[")) {
-    const fixed = relaxFixJson(text);
-    const viaFence = matchCodeFence(fixed);
-    if (viaFence) {
-      const parsed = tryParseJSON(viaFence);
-      if (parsed != null) return parsed;
-    }
-    const slice2 = findFirstJsonSlice(fixed);
-    if (slice2) {
-      const parsed = tryParseJSON(slice2);
-      if (parsed != null) return parsed;
-    }
-    const parsed = tryParseJSON(fixed);
-    if (parsed != null) return parsed;
-  }
-  return null;
-}
-
-// 提取 ```json\n...``` 或 ```\n...``` 代码块中的内容
-function matchCodeFence(input: string): string | null {
-  const re = /```\s*(json)?\s*\n([\s\S]*?)\n```/i;
-  const m = re.exec(input);
-  return m ? m[2].trim() : null;
-}
-
-// 在混合文本中定位第一个“平衡”的 JSON 片段（对象或数组）
-function findFirstJsonSlice(input: string): string | null {
-  const idxBrace = input.indexOf("{");
-  const idxBracket = input.indexOf("[");
-  const startIdx =
-    idxBrace === -1
-      ? idxBracket
-      : idxBracket === -1
-      ? idxBrace
-      : Math.min(idxBrace, idxBracket);
-  if (startIdx === -1) return null;
-  let i = startIdx;
-  const stack: string[] = [];
-  let inString = false;
-  let escape = false;
-  for (; i < input.length; i++) {
-    const ch = input[i];
-    if (inString) {
-      if (escape) {
-        escape = false;
-      } else if (ch === "\\") {
-        escape = true;
-      } else if (ch === '"') {
-        inString = false;
-      }
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      continue;
-    }
-    if (ch === "{" || ch === "[") stack.push(ch);
-    else if (ch === "}" || ch === "]") {
-      if (!stack.length) break;
-      const last = stack[stack.length - 1];
-      if ((last === "{" && ch === "}") || (last === "[" && ch === "]"))
-        stack.pop();
-      else return null;
-      if (!stack.length) {
-        const slice = input.slice(startIdx, i + 1);
-        return slice;
-      }
-    }
-  }
-  return null;
-}
-
-// 宽松修复：尽量把“近似 JSON”修成可解析的 JSON 字符串
-function relaxFixJson(input: string): string {
-  let s = input;
-  // 去掉常见围栏
-  s = s.replace(/```\s*(json)?/gi, "").replace(/```/g, "");
-  // 将未加引号的键名补引号：{ key: value } -> { "key": value }
-  s = s.replace(/([,{]\s*)([A-Za-z_][A-Za-z0-9_]*?)\s*:/g, '$1"$2":');
-  // 将单引号包裹的字符串转为双引号（尽力而为）
-  s = s.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, '"$1"');
-  // 移除尾随逗号
-  s = s.replace(/,\s*([}\]])/g, "$1");
-  return s;
-}
-
-function normalizeOptions(
-  raw: unknown,
-  meta?: { groupId?: string; groupLabel?: string }
-): AgentFieldOption[] {
-  const toOption = (input: unknown): AgentFieldOption | null => {
-    if (typeof input === "string") {
-      return {
-        value: input,
-        confidence: Math.min(
-          OPTION_CONF_CAP,
-          OPTION_CONF_BASE + input.length * 0.01
-        ),
-        groupId: meta?.groupId,
-        groupLabel: meta?.groupLabel,
-      };
-    }
-    if (!input || typeof input !== "object") return null;
-    const record = input as Record<string, unknown>;
-    const value =
-      typeof record.value === "string"
-        ? record.value
-        : record.value != null
-        ? String(record.value)
-        : null;
-    if (!value) return null;
-    return {
-      value,
-      confidence:
-        typeof record.confidence === "number"
-          ? clampConfidence(record.confidence)
-          : undefined,
-      rationale:
-        typeof record.rationale === "string"
-          ? record.rationale
-          : record.rationale != null
-          ? String(record.rationale)
-          : undefined,
-      sourceText:
-        typeof record.sourceText === "string" ? record.sourceText : undefined,
-      groupId: meta?.groupId,
-      groupLabel: meta?.groupLabel,
-    };
-  };
-
-  if (Array.isArray(raw)) {
-    return sanitizeOptions(
-      raw
-        .map((item) => toOption(item))
-        .filter((item): item is AgentFieldOption => item !== null)
-    );
-  }
-
-  const option = toOption(raw);
-  return option ? sanitizeOptions([option]) : [];
 }
 
 function normalizeGroup(
@@ -401,19 +178,75 @@ function normalizeGroup(
     score: finalConfidence,
   };
 }
-function ensureStructure(payload: Record<string, unknown>): Record<string, unknown> {
-  return payload;
-}
 
-function sanitizeOptions(options: AgentFieldOption[]): AgentFieldOption[] {
-  return options
-    .map((option) => ({
-      ...option,
-      confidence:
-        typeof option.confidence === "number"
-          ? clampConfidence(option.confidence)
-          : undefined,
-    }))
-    .filter((option) => (option.confidence ?? 0) >= MIN_CONFIDENCE)
-    .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+function coalesceFieldLevelGroups(
+  groups: unknown[],
+  formSchema: AgentFormField[]
+): unknown[] {
+  if (groups.length <= 1) return groups;
+  const allowedFieldIds = new Set(formSchema.map((item) => item.id));
+  const seenFields = new Set<string>();
+
+  type FieldLevelRecord = { record: Record<string, unknown>; fieldId: string };
+
+  const fieldLevelGroups: FieldLevelRecord[] = [];
+
+  for (const group of groups) {
+    if (!group || typeof group !== "object") return groups;
+    const record = group as Record<string, unknown>;
+    const candidates = record.fieldCandidates;
+    if (!candidates || typeof candidates !== "object") return groups;
+    const keys = Object.keys(candidates as Record<string, unknown>);
+    if (keys.length !== 1) return groups;
+    const fieldId = keys[0];
+    if (!allowedFieldIds.has(fieldId)) return groups;
+    if (seenFields.has(fieldId)) return groups;
+    seenFields.add(fieldId);
+    fieldLevelGroups.push({ record, fieldId });
+  }
+
+  if (!fieldLevelGroups.length || fieldLevelGroups.length > allowedFieldIds.size) {
+    return groups;
+  }
+
+  const mergedFieldCandidates: Record<string, unknown[]> = {};
+  const rationales: string[] = [];
+  const confidences: number[] = [];
+  let label: string | undefined;
+
+  for (const { record, fieldId } of fieldLevelGroups) {
+    if (!label && typeof record.label === "string" && record.label.trim()) {
+      label = record.label.trim();
+    }
+    const candidates = record.fieldCandidates as Record<string, unknown>;
+    const rawValue = candidates[fieldId];
+    const arrayValue = Array.isArray(rawValue) ? rawValue : [rawValue];
+    mergedFieldCandidates[fieldId] = [
+      ...(mergedFieldCandidates[fieldId] ?? []),
+      ...arrayValue,
+    ];
+
+    if (typeof record.rationale === "string" && record.rationale.trim()) {
+      rationales.push(record.rationale.trim());
+    }
+    if (typeof record.confidence === "number" && Number.isFinite(record.confidence)) {
+      confidences.push(clampConfidence(record.confidence));
+    }
+  }
+
+  const mergedGroup: Record<string, unknown> = {
+    id: "entity_1",
+    label,
+    fieldCandidates: mergedFieldCandidates,
+  };
+
+  if (rationales.length) {
+    mergedGroup.rationale = rationales.join("；");
+  }
+  if (confidences.length) {
+    mergedGroup.confidence =
+      confidences.reduce((sum, value) => sum + value, 0) / confidences.length;
+  }
+
+  return [mergedGroup];
 }

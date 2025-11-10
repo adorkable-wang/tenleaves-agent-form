@@ -20,7 +20,8 @@
     "src/agent/**/*.ts",
     "src/schema/**/*.ts",
     "src/utils/fileParser.ts",
-    "src/types/**/*.d.ts"
+    "src/types/**/*.d.ts",
+    "shared/agent-types.ts"
   ],
   "exclude": [
     "server/**",
