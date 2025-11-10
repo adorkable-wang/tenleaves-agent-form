@@ -29,24 +29,15 @@ export function agentSchema() {
                 type: "array",
                 minItems: 1,
                 items: {
-                  anyOf: [
-                    { type: "string" },
-                    {
-                      type: "object",
-                      properties: {
-                        value: { type: "string" },
-                        confidence: {
-                          anyOf: [
-                            { type: "number", minimum: 0, maximum: 1 },
-                            { type: "null" },
-                          ],
-                        },
-                        rationale: { type: ["string", "null"] },
-                        sourceText: { type: ["string", "null"] },
-                      },
-                      required: ["value"],
-                    },
-                  ],
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    value: { type: "string" },
+                    confidence: { type: "number", minimum: 0, maximum: 1 },
+                    rationale: { type: ["string", "null"] },
+                    sourceText: { type: ["string", "null"] },
+                  },
+                  required: ["value", "confidence"],
                 },
               },
             },
