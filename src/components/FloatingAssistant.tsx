@@ -16,6 +16,7 @@ import { createPortal } from "react-dom";
 import type {
   AgentAnalyzeResult,
   AgentDocument,
+  AgentFieldGroup,
   AgentFormField,
 } from "../agent";
 import { analyzeDocumentWithDefaultAgent } from "../agent";
@@ -26,6 +27,7 @@ import {
   SUPPORTED_FORMAT_LABEL,
 } from "../utils/fileParser";
 import {
+  buildValuesFromGroup,
   chooseInitialValuesFromResult,
   emitAutofillEvent,
 } from "../agent/utils";
@@ -37,6 +39,17 @@ type ChatMsg = {
   role: "user" | "assistant" | "system";
   content: string;
   ts: number;
+};
+
+type GroupPreview = {
+  group: AgentFieldGroup;
+  entries: Array<{
+    fieldId: string;
+    label: string;
+    value: string;
+    confidence?: number;
+  }>;
+  extraCount: number;
 };
 
 interface Props {
@@ -62,6 +75,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
   const tickRef = useRef<number | null>(null);
   const startAtRef = useRef<number | null>(null);
   const lastSubmissionRef = useRef<{ docPayload: AgentDocument; label: string } | null>(null);
+  const [lastResult, setLastResult] = useState<AgentAnalyzeResult | null>(null);
   // 引用与拖拽状态
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -199,6 +213,39 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
     [computeInitialFillValuesFromResult, onApply, setInputText, setPendingFile]
   );
 
+  const fieldLabelMap = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    schema.forEach((field) => {
+      map[field.id] = field.label;
+    });
+    return map;
+  }, [schema]);
+
+  const formFieldOrder = useMemo(() => schema.map((field) => field.id), [schema]);
+
+  const groupPreviews = useMemo<GroupPreview[]>(() => {
+    if (!lastResult?.fieldGroups?.length) return [];
+    return lastResult.fieldGroups.map((group) => {
+      const orderedEntries = formFieldOrder
+        .map((fieldId) => {
+          const candidate = group.fieldCandidates?.[fieldId]?.[0];
+          if (!candidate?.value) return null;
+          return {
+            fieldId,
+            label: fieldLabelMap[fieldId] ?? fieldId,
+            value: candidate.value,
+            confidence: candidate.confidence,
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => Boolean(item));
+      return {
+        group,
+        entries: orderedEntries.slice(0, 3),
+        extraCount: Math.max(0, orderedEntries.length - 3),
+      };
+    });
+  }, [lastResult, fieldLabelMap, formFieldOrder]);
+
   const executeAnalysis = useCallback(
     async (docPayload: AgentDocument) => {
       updateSteps({
@@ -208,6 +255,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
       const result = await analyzeDocumentWithDefaultAgent(docPayload, {
         formSchema: schema,
       });
+      setLastResult(result);
       updateSteps({
         await: { status: "done" },
         apply: { status: "active" },
@@ -317,6 +365,20 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
       stopTimer();
     }
   }, [pending, beginWorkflow, executeAnalysis, handleAnalysisError, stopTimer]);
+
+  const handleApplyGroupFromAssistant = useCallback(
+    (group: AgentFieldGroup) => {
+      if (!lastResult) return;
+      const values = buildValuesFromGroup(group);
+      if (!Object.keys(values).length) return;
+      onApply(values, lastResult);
+      addMsg(
+        "assistant",
+        `已使用分组「${group.label ?? group.id}」回填表单。`
+      );
+    },
+    [lastResult, onApply, addMsg]
+  );
 
   const buttonLabel = useMemo(() => (open ? "关闭助手" : "打开助手"), [open]);
 
@@ -519,6 +581,91 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                     </button>
                   ) : null}
                 </p>
+              ) : null}
+              {groupPreviews.length ? (
+                <div className="mt-3 space-y-3">
+                  <p className="text-xs text-slate-500">
+                    {lastResult?.autoSelectGroupId
+                      ? "已自动套用置信度最高的分组，如需调整可改用以下分组："
+                      : "存在多个候选分组，请选择最合适的一组回填："}
+                  </p>
+                  <div className="space-y-3">
+                    {groupPreviews.map(({ group, entries, extraCount }) => {
+                      const confidence =
+                        group.confidence != null
+                          ? `${Math.round(group.confidence * 100)}%`
+                          : "—";
+                      const isAuto = lastResult?.autoSelectGroupId === group.id;
+                      return (
+                        <article
+                          key={group.id}
+                          className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-[11px] text-slate-500">分组</p>
+                              <p className="text-sm font-semibold text-slate-900">
+                                {group.label ?? group.id}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[11px] text-slate-500">置信度</p>
+                              <p className="text-base font-semibold text-indigo-600">
+                                {confidence}
+                              </p>
+                            </div>
+                          </div>
+                          {entries.length ? (
+                            <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                              {entries.map((entry) => (
+                                <li key={`${group.id}-${entry.fieldId}`}>
+                                  <span className="font-medium text-slate-800">
+                                    {entry.label}
+                                  </span>
+                                  ：{entry.value}
+                                  {entry.confidence != null ? (
+                                    <span className="text-slate-400">
+                                      {" "}
+                                      · {Math.round((entry.confidence ?? 0) * 100)}%
+                                    </span>
+                                  ) : null}
+                                </li>
+                              ))}
+                              {extraCount > 0 ? (
+                                <li className="text-slate-400">
+                                  +{extraCount} 个其他字段
+                                </li>
+                              ) : null}
+                            </ul>
+                          ) : (
+                            <p className="mt-2 text-xs text-slate-400">
+                              暂无可展示字段
+                            </p>
+                          )}
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            {isAuto ? (
+                              <span className="rounded-full bg-emerald-100 px-3 py-1 text-[11px] text-emerald-700">
+                                已自动回填
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-500">
+                                确认后将覆盖当前表单值
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              className="assistant-circle assistant-circle--primary text-xs px-3 py-1"
+                              onClick={() => handleApplyGroupFromAssistant(group)}
+                              disabled={isAuto}
+                            >
+                              使用此分组
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
               ) : null}
               <div className="chat-input">
                 {pendingFile ? (
