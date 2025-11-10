@@ -112,33 +112,6 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
     []
   );
 
-  const formatAssistantSummary = (result: AgentAnalyzeResult): string => {
-    const lines: string[] = [];
-    if (result.summary) lines.push(`摘要：${result.summary}`);
-    const groups = result.fieldGroups ?? [];
-    groups.forEach((group, index) => {
-      const headerConf =
-        group.confidence != null
-          ? `${Math.round(group.confidence * 100)}%`
-          : "—";
-      lines.push(`分组 ${index + 1}（ID: ${group.id}，置信度 ${headerConf}）`);
-      const candidates = group.fieldCandidates;
-      Object.entries(candidates).forEach(([fieldId, opts]) => {
-        if (!opts?.length) return;
-        const best = opts[0];
-        const conf =
-          best.confidence != null
-            ? `${Math.round(best.confidence * 100)}%`
-            : "—";
-        lines.push(`- ${fieldId}: ${best.value || "（空）"}（置信度 ${conf}）`);
-      });
-    });
-    if (!groups.length) {
-      lines.push("（未识别到任何分组）");
-    }
-    return lines.join("\n");
-  };
-
   const startTimer = useCallback(() => {
     startAtRef.current = Date.now();
     setElapsedMs(0);
@@ -284,9 +257,8 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
       updateSteps({
         apply: { status: "done" },
       });
-      addMsg("assistant", formatAssistantSummary(result));
     },
-    [schema, updateSteps, applyResultToForm, addMsg]
+    [schema, updateSteps, applyResultToForm]
   );
 
   const beginWorkflow = useCallback(
