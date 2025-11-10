@@ -13,6 +13,4 @@ app.use('/api/agent', agentRouter)
 // 错误处理中间件（需放在路由之后）
 app.use(errorHandler)
 
-app.listen(PORT, () => {
-  console.log(`[agent-server] listening on http://localhost:${PORT}`)
-})
+app.listen(PORT)

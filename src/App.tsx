@@ -6,9 +6,8 @@
  * - 右下角悬浮助手（FloatingAssistant）：支持文本/文件输入，提交后调用智能体并回填表单
  * - 首次获得分析结果时，自动应用“最高置信度组合 + 字段主值/候选首值”初始化表单
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { type AgentAnalyzeResult, type AgentFieldOption } from "./agent";
-import { chooseInitialValuesFromResult } from './agent/utils'
 // 悬浮窗聊天助手
 import FloatingAssistant from "./components/FloatingAssistant";
 import AutofillForm from "./components/AutofillForm";
@@ -19,7 +18,7 @@ import { formSchema } from "./schema/formSchema";
 // 表单字段定义已抽出至 ./schema/formSchema
 
 // 初始化表单值的工具函数
-import { createInitialFormValues } from './schema/utils'
+import { createInitialFormValues } from "./schema/utils";
 
 function App() {
   const [formValues, setFormValues] = useState<Record<string, string>>(() =>
@@ -61,76 +60,7 @@ function App() {
 
   // 无需镜像 Hook 结果；悬浮窗 onApply 会直接写入
 
-  // 控制台打印识别详情（便于开发调试）
-  useEffect(() => {
-    if (!analysisResult) return;
-    if (!import.meta.env.DEV) return;
-
-    console.groupCollapsed(
-      `%c智能体识别结果 - ${analysisResult.backend}`,
-      "color:#2563eb;font-weight:600;"
-    );
-      const printableGroups = (analysisResult.fieldGroups ?? []).map((group) => ({
-        分组: group.id,
-        置信度: group.confidence != null ? `${Math.round(group.confidence * 100)}%` : "—",
-        字段数: Object.keys(group.fieldCandidates).length,
-      }));
-    console.table(printableGroups);
-
-      const firstGroup = analysisResult.fieldGroups?.[0];
-      if (firstGroup?.fieldCandidates) {
-        const preview = Object.entries(firstGroup.fieldCandidates).map(
-          ([fieldId, opts]) => ({
-            字段: fieldId,
-            首选值: opts?.[0]?.value ?? "",
-            首选置信度:
-              opts?.[0]?.confidence != null
-                ? `${Math.round((opts[0].confidence ?? 0) * 100)}%`
-                : "—",
-          })
-        );
-      console.groupCollapsed("第一分组字段预览");
-      console.table(preview);
-      console.groupEnd();
-    }
-
-    const hasPairs = Object.keys(analysisResult.extractedPairs).length > 0;
-    if (hasPairs) {
-      console.groupCollapsed("原始键值对");
-      console.table(analysisResult.extractedPairs);
-      console.groupEnd();
-    }
-
-    if (analysisResult.summary) {
-      console.info("摘要：", analysisResult.summary);
-    }
-
-    if (analysisResult.diagnostics?.length) {
-      console.warn("诊断信息：", analysisResult.diagnostics);
-    }
-
-    console.groupEnd();
-  }, [analysisResult]);
-
   // 输入变更逻辑已由 AutofillForm 组件通过 onChange 直接处理
-
-  // 当新的分析结果可用时初始化表单值（每份结果仅初始化一次，防止循环）
-  const lastInitializedRef = useRef<AgentAnalyzeResult | null>(null)
-  useEffect(() => {
-    if (!analysisResult) return
-    // 若本次结果已初始化过，直接退出
-    if (lastInitializedRef.current === analysisResult) return
-
-    // 仅当表单当前全部为空时才进行初始化，避免覆盖用户已编辑内容
-    const allEmpty = Object.values(formValues).every((v) => !v)
-    if (!allEmpty) return
-
-    setFormValues((prev) => ({ ...prev, ...chooseInitialValuesFromResult(analysisResult) }))
-    // 记录已对该份结果做过初始化
-    lastInitializedRef.current = analysisResult
-    // 仅依赖 analysisResult（避免 setFormValues -> formValues 变化导致的重复触发）
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysisResult])
 
   // 重置表单并清理状态
   const resetForm = useCallback(() => {

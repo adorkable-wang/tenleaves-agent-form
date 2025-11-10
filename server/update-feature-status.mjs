@@ -99,28 +99,22 @@ function main() {
   const data = readData();
 
   if (id && !status) {
-    console.error("缺少 --status 参数");
-    process.exit(1);
+    throw new Error("缺少 --status 参数");
   }
 
   if (status && !allowedStatus.has(status)) {
-    console.error("不支持的状态：", status);
-    process.exit(1);
+    throw new Error(`不支持的状态：${status}`);
   }
 
   if (id && status) {
     const feature = data.features.find((item) => item.id === id);
     if (!feature) {
-      console.error(`未找到功能 ID：${id}`);
-      process.exit(1);
+      throw new Error(`未找到功能 ID：${id}`);
     }
     feature.status = status;
     feature.lastUpdated = new Date().toISOString();
     data.updatedAt = feature.lastUpdated;
     writeData(data);
-    console.log(
-      `已更新 ${id} 为 ${statusLabel(status)}（${feature.lastUpdated}）`
-    );
   } else if (!data.updatedAt) {
     data.updatedAt = new Date().toISOString();
     writeData(data);
@@ -129,7 +123,6 @@ function main() {
   const refreshed = readData();
   const md = renderMarkdown(refreshed);
   fs.writeFileSync(mdPath, md, "utf-8");
-  console.log("已生成 docs/feature-status.md");
 }
 
 main();
