@@ -5,13 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "tsx server/index.ts",
+    "dev:all": "bash -c 'trap \"kill 0\" EXIT; pnpm run dev:server & pnpm run dev'",
     "build": "tsc -b && vite build",
     "build:types": "tsc -p tsconfig.lib.json",
     "build:lib": "vite build -c vite.lib.config.ts",
     "build:pkg": "pnpm run build:types && pnpm run build:lib",
     "lint": "eslint .",
     "preview": "vite preview",
-    "agent:server": "tsx server/index.ts"
+    "agent:server": "tsx server/index.ts",
+    "feature:update": "node server/update-feature-status.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

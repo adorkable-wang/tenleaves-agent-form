@@ -52,6 +52,10 @@ pnpm dev
   - `server/services/llm/dashscopeClient.ts`：请求 DashScope（支持 JSON Schema 约束）。
   - `server/services/normalize.ts`：容错解析/归一化（字段、候选项、组合、extractedPairs、actions）。
   - `server/services/prompt.ts`：结合 schema 生成提示词。
+- 功能追踪
+  - `docs/feature-status.json`：功能清单与优先级/状态记录（勿手改）。
+  - `docs/feature-status.md`：由脚本自动生成的可读版进度表。
+  - `pnpm feature:update -- --id B6 --status done`：更新状态并同步文档，status 取 `pending | in_progress | done`。
 - `server/config.ts`：读取 `DASHSCOPE_*`、`LLM_TIMEOUT_ENABLED`、`LLM_TIMEOUT_MS`、`LLM_RETRIES` 等配置。
 
 > 安全提示：不要在浏览器端保存任何 API Key，所有模型调用均放在服务端。
