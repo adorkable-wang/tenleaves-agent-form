@@ -583,13 +583,13 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                 </p>
               ) : null}
               {groupPreviews.length ? (
-                <div className="mt-3 space-y-3">
+                <div className="mt-3 space-y-3 border-t border-slate-200/70 pt-3">
                   <p className="text-xs text-slate-500">
                     {lastResult?.autoSelectGroupId
                       ? "已自动套用置信度最高的分组，如需调整可改用以下分组："
                       : "存在多个候选分组，请选择最合适的一组回填："}
                   </p>
-                  <div className="space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     {groupPreviews.map(({ group, entries, extraCount }) => {
                       const confidence =
                         group.confidence != null
@@ -599,7 +599,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                       return (
                         <article
                           key={group.id}
-                          className="rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm"
+                          className="flex h-full flex-col rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm"
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div>
@@ -642,7 +642,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                               暂无可展示字段
                             </p>
                           )}
-                          <div className="mt-3 flex items-center justify-between gap-2">
+                          <div className="mt-3 flex items-center justify-between gap-2 pt-2">
                             {isAuto ? (
                               <span className="rounded-full bg-emerald-100 px-3 py-1 text-[11px] text-emerald-700">
                                 已自动回填
@@ -654,7 +654,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                             )}
                             <button
                               type="button"
-                              className="assistant-circle assistant-circle--primary text-xs px-3 py-1"
+                              className="inline-flex items-center rounded-full border border-indigo-200 px-3 py-1 text-xs font-medium text-indigo-700 transition hover:bg-indigo-50 disabled:opacity-40"
                               onClick={() => handleApplyGroupFromAssistant(group)}
                               disabled={isAuto}
                             >
