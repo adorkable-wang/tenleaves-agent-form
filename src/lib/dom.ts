@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
 /**
  * DOM 侧表单快照工具（中文注释版）
  *
