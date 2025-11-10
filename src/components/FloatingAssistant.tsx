@@ -587,14 +587,12 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                       const isAuto = lastResult?.autoSelectGroupId === group.id;
                       const isManual = manualGroupId === group.id;
                       const isApplied = isAuto || isManual;
-                      const isExpanded = expandedGroups[group.id] ?? false;
-                      const visibleEntries = isExpanded
-                        ? entries
-                        : entries.slice(0, 3);
-                        const hiddenCount = Math.max(
-                          0,
-                          entries.length - visibleEntries.length
-                        );
+                        const isExpanded = expandedGroups[group.id] ?? false;
+                        const hasExtra = entries.length > 3;
+                        const hiddenCount = Math.max(0, entries.length - 3);
+                        const visibleEntries = isExpanded || !hasExtra
+                          ? entries
+                          : entries.slice(0, 3);
                         return (
                         <article
                           key={group.id}
@@ -668,7 +666,7 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                                 暂无可展示字段
                               </p>
                             )}
-                            {hiddenCount > 0 ? (
+                            {hasExtra ? (
                               <button
                                 type="button"
                                 className="mt-2 text-[11px] text-indigo-600 underline-offset-2 hover:underline"
