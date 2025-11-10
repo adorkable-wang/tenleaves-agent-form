@@ -593,10 +593,10 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                         const visibleEntries = isExpanded || !hasExtra
                           ? entries
                           : entries.slice(0, 3);
-                        return (
+                      return (
                         <article
                           key={group.id}
-                          className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm"
+                          className="flex h-[16rem] flex-col rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <span className="inline-flex max-w-full truncate rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">
@@ -623,63 +623,76 @@ export const FloatingAssistant: React.FC<Props> = ({ schema, onApply }) => {
                               </button>
                             </div>
                           </div>
-                          {visibleEntries.length ? (
-                            <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                              {visibleEntries.map((entry) => {
-                                const normalized = entry.value
-                                  .trim()
-                                    .toLowerCase();
-                                  const isDuplicate = duplicateValues.has(
-                                    normalized
-                                  );
-                                  return (
-                                    <li
-                                      key={`${group.id}-${entry.fieldId}`}
-                                      className="flex flex-col"
-                                    >
-                                      <span className="text-[11px] text-slate-400">
-                                        {entry.label}
-                                      </span>
-                                      <span
-                                        className={`font-medium ${
-                                          isDuplicate
-                                            ? "text-amber-600"
-                                            : "text-slate-800"
-                                        }`}
+                          <div className="relative mt-2 flex-1">
+                            {visibleEntries.length ? (
+                              <div
+                                className={`pr-1 transition-[max-height] duration-300 ease-out ${
+                                  isExpanded || !hasExtra
+                                    ? "max-h-full overflow-y-auto"
+                                    : "max-h-24 overflow-hidden"
+                                }`}
+                              >
+                                <ul className="space-y-1 text-xs text-slate-600">
+                                  {visibleEntries.map((entry) => {
+                                    const normalized = entry.value
+                                      .trim()
+                                      .toLowerCase();
+                                    const isDuplicate = duplicateValues.has(
+                                      normalized
+                                    );
+                                    return (
+                                      <li
+                                        key={`${group.id}-${entry.fieldId}`}
+                                        className="flex flex-col"
                                       >
-                                        {entry.value}
-                                        {entry.confidence != null ? (
-                                          <span className="ml-1 text-[10px] text-slate-400">
-                                            {Math.round(
-                                              (entry.confidence ?? 0) * 100
-                                            )}
-                                            %
-                                          </span>
-                                        ) : null}
-                                      </span>
-                                    </li>
-                                  );
-                                })}
-                              </ul>
+                                        <span className="text-[11px] text-slate-400">
+                                          {entry.label}
+                                        </span>
+                                        <span
+                                          className={`font-medium ${
+                                            isDuplicate
+                                              ? "text-amber-600"
+                                              : "text-slate-800"
+                                          }`}
+                                        >
+                                          {entry.value}
+                                          {entry.confidence != null ? (
+                                            <span className="ml-1 text-[10px] text-slate-400">
+                                              {Math.round(
+                                                (entry.confidence ?? 0) * 100
+                                              )}
+                                              %
+                                            </span>
+                                          ) : null}
+                                        </span>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              </div>
                             ) : (
                               <p className="mt-2 text-xs text-slate-400">
                                 暂无可展示字段
                               </p>
                             )}
-                            {hasExtra ? (
-                              <button
-                                type="button"
-                                className="mt-2 text-[11px] text-indigo-600 underline-offset-2 hover:underline"
-                                onClick={() => toggleGroupExpand(group.id)}
-                              >
-                                {isExpanded
-                                  ? "收起其他字段"
-                                  : `展开其余 ${hiddenCount} 个字段`}
-                              </button>
+                            {!isExpanded && hasExtra ? (
+                              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 rounded-b-2xl bg-gradient-to-t from-white/95 via-white/70 to-transparent" />
                             ) : null}
-                          </article>
-                        );
-                      })}
+                          </div>
+                          {hasExtra ? (
+                            <button
+                              type="button"
+                              className="mt-2 text-[11px] text-indigo-600 underline-offset-2 hover:underline"
+                              onClick={() => toggleGroupExpand(group.id)}
+                            >
+                              {isExpanded
+                                ? "收起其他字段"
+                                : `展开其余 ${hiddenCount} 个字段`}
+                            </button>
+                          ) : null}
+                        </article>
+                      );
+                    })}
                     </div>
                   </div>
                 ) : null}
