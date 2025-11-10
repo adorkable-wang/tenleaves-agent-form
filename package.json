@@ -12,6 +12,7 @@
     "build:lib": "vite build -c vite.lib.config.ts",
     "build:pkg": "pnpm run build:types && pnpm run build:lib",
     "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.lib.json --noEmit",
     "preview": "vite preview",
     "agent:server": "tsx server/index.ts",
     "feature:update": "node server/update-feature-status.mjs"
