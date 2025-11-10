@@ -5,7 +5,7 @@ export const PORT = Number(process.env.PORT ?? 8787);
 export const DASHSCOPE_ENDPOINT =
   process.env.DASHSCOPE_ENDPOINT ??
   "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
-export const DASHSCOPE_MODEL = process.env.DASHSCOPE_MODEL ?? "qwen-plus";
+export const DASHSCOPE_MODEL = process.env.DASHSCOPE_MODEL ?? "qwen-turbo";
 export const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY;
 
 if (!DASHSCOPE_API_KEY) {
