@@ -11,7 +11,7 @@ import type {
   AgentDocument,
 } from './types'
 
-interface RemoteAgentConfig {
+export interface RemoteAgentConfig {
   endpoint: string
   apiKey?: string
 }
