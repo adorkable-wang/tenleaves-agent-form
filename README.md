@@ -26,6 +26,12 @@ pnpm dev
 
 # 开发阶段建议同时执行类型检查
 pnpm typecheck
+
+# 规范相关常用脚本
+pnpm lint
+pnpm lint:fix
+pnpm format
+pnpm format:check
 ```
 
 > 说明：**不配置 `LLM_TIMEOUT_ENABLED` 时表示关闭超时检测**，即请求将一直等待 DashScope 的响应；只有在将其设为 `true` 时，`LLM_TIMEOUT_MS` 的数值才会生效，可按需调整毫秒值。
@@ -38,14 +44,12 @@ pnpm typecheck
 ## 体系结构
 
 - 前端智能助手与表单
-
   - `src/App.tsx`：只渲染可编辑表单（AutofillForm）+ 悬浮助手（FloatingAssistant）。
   - `src/components/FloatingAssistant.tsx`：支持文本输入、拖拽/粘贴/选择文件，调用智能体后回填表单。
   - `src/utils/fileParser.ts`：浏览器侧把 DOCX/XLSX/CSV/TXT/MD/JSON 等转成纯文本，统一交给智能体。
   - 表单 Schema 在 `src/schema/formSchema.ts`，初始值工具 `src/schema/utils.ts`。
 
 - 智能体抽象（可封装为 npm）
-
   - `src/agent/`：统一类型与调用入口。`RemoteAgentBackend` 通过 HTTP 调用后端接口。
   - `src/lib/index.ts`：打包导出，供其他项目复用（types、client、DOM 工具、文件解析等）。
 
@@ -89,14 +93,14 @@ import {
   formSchema,
   createInitialFormValues,
   parseFileToAgentDocument,
-} from "./src/lib";
+} from './src/lib'
 
-const client = createAgentClient({ endpoint: "/api/agent/analyze" });
+const client = createAgentClient({ endpoint: '/api/agent/analyze' })
 
 async function handle(file: File) {
-  const parsed = await parseFileToAgentDocument(file);
-  const result = await client.analyze(parsed.document, { formSchema });
-  const initial = createInitialFormValues(formSchema);
+  const parsed = await parseFileToAgentDocument(file)
+  const result = await client.analyze(parsed.document, { formSchema })
+  const initial = createInitialFormValues(formSchema)
   // 将 result 融合到你的表单 UI
 }
 ```

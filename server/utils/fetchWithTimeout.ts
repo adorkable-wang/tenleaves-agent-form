@@ -11,20 +11,14 @@ type FetchWithTimeoutOptions = {
 export async function fetchWithTimeout(
   url: string,
   init: RequestInit = {},
-  {
-    timeoutMs = 18000,
-    retries = 1,
-    enableTimeout = true,
-  }: FetchWithTimeoutOptions = {}
+  { timeoutMs = 18000, retries = 1, enableTimeout = true }: FetchWithTimeoutOptions = {}
 ): Promise<Response> {
   let attempt = 0
   let lastErr: unknown
   while (attempt <= retries) {
     const controller = enableTimeout ? new AbortController() : null
     const timer =
-      enableTimeout && timeoutMs > 0
-        ? setTimeout(() => controller?.abort(), timeoutMs)
-        : null
+      enableTimeout && timeoutMs > 0 ? setTimeout(() => controller?.abort(), timeoutMs) : null
     try {
       const res = await fetch(url, {
         ...init,

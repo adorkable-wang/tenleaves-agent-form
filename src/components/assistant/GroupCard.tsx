@@ -1,18 +1,18 @@
-import type { AgentFieldGroup } from "../../agent";
-import type { GroupPreview } from "../../hooks/useGroupPreviews";
+import type { AgentFieldGroup } from '../../agent'
+import type { GroupPreview } from '../../hooks/useGroupPreviews'
 
 interface GroupCardProps {
-  preview: GroupPreview;
-  isApplied: boolean;
-  onApply: (group: AgentFieldGroup) => void;
+  preview: GroupPreview
+  isApplied: boolean
+  onApply: (group: AgentFieldGroup) => void
 }
 
 function CandidateList({
   entries,
   duplicateValues,
 }: {
-  entries: GroupPreview["entries"];
-  duplicateValues: Set<string>;
+  entries: GroupPreview['entries']
+  duplicateValues: Set<string>
 }) {
   return (
     <div className="relative mt-2 flex-1 min-h-0 overflow-hidden">
@@ -20,17 +20,13 @@ function CandidateList({
         <div className="pr-1 h-full overflow-y-auto">
           <ul className="space-y-1 text-xs text-slate-600">
             {entries.map((entry) => {
-              const normalized = entry.value.trim().toLowerCase();
-              const isDuplicate = duplicateValues.has(normalized);
+              const normalized = entry.value.trim().toLowerCase()
+              const isDuplicate = duplicateValues.has(normalized)
               return (
                 <li key={`${entry.fieldId}`} className="flex flex-col">
-                  <span className="text-[11px] text-slate-400">
-                    {entry.label}
-                  </span>
+                  <span className="text-[11px] text-slate-400">{entry.label}</span>
                   <span
-                    className={`font-medium ${
-                      isDuplicate ? "text-amber-600" : "text-slate-800"
-                    }`}
+                    className={`font-medium ${isDuplicate ? 'text-amber-600' : 'text-slate-800'}`}
                   >
                     {entry.value}
                     {entry.confidence != null ? (
@@ -40,7 +36,7 @@ function CandidateList({
                     ) : null}
                   </span>
                 </li>
-              );
+              )
             })}
           </ul>
         </div>
@@ -48,15 +44,12 @@ function CandidateList({
         <p className="mt-2 text-xs text-slate-400">暂无可展示字段</p>
       )}
     </div>
-  );
+  )
 }
 
 export function GroupCard({ preview, isApplied, onApply }: GroupCardProps) {
-  const { group, entries, duplicateValues } = preview;
-  const confidence =
-    group.confidence != null
-      ? `${Math.round(group.confidence * 100)}%`
-      : "—";
+  const { group, entries, duplicateValues } = preview
+  const confidence = group.confidence != null ? `${Math.round(group.confidence * 100)}%` : '—'
 
   return (
     <article className="flex min-h-[18rem] flex-col rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm">
@@ -68,11 +61,9 @@ export function GroupCard({ preview, isApplied, onApply }: GroupCardProps) {
           <span className="text-[11px] text-slate-500">置信度 {confidence}</span>
           <button
             type="button"
-            className={`assistant-check ${
-              isApplied ? "assistant-check--active" : ""
-            }`}
+            className={`assistant-check ${isApplied ? 'assistant-check--active' : ''}`}
             onClick={() => {
-              onApply(group);
+              onApply(group)
             }}
             disabled={isApplied}
             aria-label="使用此分组回填"
@@ -87,7 +78,7 @@ export function GroupCard({ preview, isApplied, onApply }: GroupCardProps) {
       </div>
       <CandidateList entries={entries} duplicateValues={duplicateValues} />
     </article>
-  );
+  )
 }
 
-export default GroupCard;
+export default GroupCard

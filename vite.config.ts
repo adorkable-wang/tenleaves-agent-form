@@ -5,8 +5,7 @@ import UnoCSS from 'unocss/vite'
 function computeBasePath(endpoint: string): string | null {
   try {
     const url = new URL(endpoint, 'http://localhost')
-    const trimmed =
-      url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '')
+    const trimmed = url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '')
     if (trimmed === '/' || trimmed === '') {
       return null
     }

@@ -1,26 +1,23 @@
-import React from "react";
-import {
-  ACCEPT_ATTRIBUTE_VALUE,
-  SUPPORTED_FORMAT_LABEL,
-} from "../../utils/fileParser";
+import React from 'react'
+import { ACCEPT_ATTRIBUTE_VALUE, SUPPORTED_FORMAT_LABEL } from '../../utils/fileParser'
 
 interface AssistantInputAreaProps {
-  pending: boolean;
-  pendingFile: File | null;
-  inputText: string;
-  dragActive: boolean;
-  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
-  onInputChange: (value: string) => void;
-  onPaste: React.ClipboardEventHandler<HTMLTextAreaElement>;
-  onDrop: React.DragEventHandler<HTMLTextAreaElement>;
-  onDragOver: React.DragEventHandler<HTMLTextAreaElement>;
-  onDragLeave: () => void;
-  onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement>;
-  onSelectFileClick: () => void;
-  onFileChange: React.ChangeEventHandler<HTMLInputElement>;
-  onRemoveFile: () => void;
-  onSubmit: () => void;
+  pending: boolean
+  pendingFile: File | null
+  inputText: string
+  dragActive: boolean
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>
+  fileInputRef: React.RefObject<HTMLInputElement | null>
+  onInputChange: (value: string) => void
+  onPaste: React.ClipboardEventHandler<HTMLTextAreaElement>
+  onDrop: React.DragEventHandler<HTMLTextAreaElement>
+  onDragOver: React.DragEventHandler<HTMLTextAreaElement>
+  onDragLeave: () => void
+  onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement>
+  onSelectFileClick: () => void
+  onFileChange: React.ChangeEventHandler<HTMLInputElement>
+  onRemoveFile: () => void
+  onSubmit: () => void
 }
 
 export function AssistantInputArea({
@@ -46,18 +43,14 @@ export function AssistantInputArea({
       {pendingFile ? (
         <div className="mb-2 text-xs text-slate-700">
           已选择文件：<strong>{pendingFile.name}</strong>
-          <button
-            type="button"
-            className="ml-2 text-indigo-700 underline"
-            onClick={onRemoveFile}
-          >
+          <button type="button" className="ml-2 text-indigo-700 underline" onClick={onRemoveFile}>
             移除
           </button>
         </div>
       ) : null}
       <div
         className={`assistant-input-wrap ${
-          dragActive ? "ring-3 ring-indigo-400/45 border-indigo-400/60" : ""
+          dragActive ? 'ring-3 ring-indigo-400/45 border-indigo-400/60' : ''
         }`}
         aria-busy={pending}
       >
@@ -82,8 +75,8 @@ export function AssistantInputArea({
           onDrop={onDrop}
           onDragOver={onDragOver}
           onDragLeave={(e) => {
-            e.preventDefault();
-            onDragLeave();
+            e.preventDefault()
+            onDragLeave()
           }}
           onKeyDown={onKeyDown}
           disabled={pending}
@@ -101,8 +94,8 @@ export function AssistantInputArea({
           className="hidden"
           accept={ACCEPT_ATTRIBUTE_VALUE}
           onChange={(e) => {
-            onFileChange(e);
-            e.currentTarget.value = "";
+            onFileChange(e)
+            e.currentTarget.value = ''
           }}
         />
         <button
@@ -121,7 +114,7 @@ export function AssistantInputArea({
         </button>
       </div>
     </div>
-  );
+  )
 }
 
-export default AssistantInputArea;
+export default AssistantInputArea

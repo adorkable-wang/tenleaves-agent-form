@@ -1,15 +1,15 @@
-import type { AgentFieldGroup } from "../../agent";
-import type { GroupPreview } from "../../hooks/useGroupPreviews";
-import GroupCard from "./GroupCard";
+import type { AgentFieldGroup } from '../../agent'
+import type { GroupPreview } from '../../hooks/useGroupPreviews'
+import GroupCard from './GroupCard'
 
 interface ResultSectionProps {
-  previews: GroupPreview[];
-  manualGroupId: string | null;
-  sourceLabel?: string;
-  canRetry: boolean;
-  pending: boolean;
-  onRetry: () => void;
-  onApply: (group: AgentFieldGroup) => void;
+  previews: GroupPreview[]
+  manualGroupId: string | null
+  sourceLabel?: string
+  canRetry: boolean
+  pending: boolean
+  onRetry: () => void
+  onApply: (group: AgentFieldGroup) => void
 }
 
 export function ResultSection({
@@ -21,15 +21,13 @@ export function ResultSection({
   onRetry,
   onApply,
 }: ResultSectionProps) {
-  if (!previews.length) return null;
+  if (!previews.length) return null
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-slate-900">最新识别结果</p>
-          <p className="text-xs text-slate-400">
-            来源：{sourceLabel ?? "本次任务"}
-          </p>
+          <p className="text-xs text-slate-400">来源：{sourceLabel ?? '本次任务'}</p>
         </div>
         {canRetry ? (
           <button
@@ -44,7 +42,7 @@ export function ResultSection({
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {previews.map((preview) => {
-          const isApplied = manualGroupId === preview.group.id;
+          const isApplied = manualGroupId === preview.group.id
           return (
             <GroupCard
               key={preview.group.id}
@@ -52,11 +50,11 @@ export function ResultSection({
               isApplied={isApplied}
               onApply={onApply}
             />
-          );
+          )
         })}
       </div>
     </section>
-  );
+  )
 }
 
-export default ResultSection;
+export default ResultSection

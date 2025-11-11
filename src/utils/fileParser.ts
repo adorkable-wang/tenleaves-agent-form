@@ -113,9 +113,7 @@ export const SUPPORTED_FORMAT_LABEL =
  * - Word 使用 mammoth 提取文本
  * - Excel 使用 xlsx 逐表转为 TSV 文本
  */
-export async function parseFileToAgentDocument(
-  file: File
-): Promise<ParsedAgentDocument> {
+export async function parseFileToAgentDocument(file: File): Promise<ParsedAgentDocument> {
   const extension = extractExtension(file.name)
   const lowerType = file.type.toLowerCase()
 
@@ -163,10 +161,7 @@ export async function parseFileToAgentDocument(
         filename: file.name,
       },
       formatLabel: 'Excel 工作簿',
-      notes: [
-        '已将每个工作表转换为制表符分隔的文本，建议上传结构化数据以提高准确率。',
-        ...notes,
-      ],
+      notes: ['已将每个工作表转换为制表符分隔的文本，建议上传结构化数据以提高准确率。', ...notes],
     }
   }
 

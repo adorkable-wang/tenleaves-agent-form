@@ -3,11 +3,7 @@
  * - 在前端直接创建一个“远程智能体客户端”，对外提供 analyze(document, options)
  * - 内部复用 createRemoteAgentRunner，便于与现有调用栈对齐
  */
-import type {
-  AgentAnalyzeOptions,
-  AgentAnalyzeResult,
-  AgentDocument,
-} from '../agent'
+import type { AgentAnalyzeOptions, AgentAnalyzeResult, AgentDocument } from '../agent'
 import { createRemoteAgentRunner } from '../agent'
 
 export interface AgentClientConfig {
@@ -16,10 +12,7 @@ export interface AgentClientConfig {
 }
 
 export interface AgentClient {
-  analyze(
-    document: AgentDocument,
-    options: AgentAnalyzeOptions
-  ): Promise<AgentAnalyzeResult>
+  analyze(document: AgentDocument, options: AgentAnalyzeOptions): Promise<AgentAnalyzeResult>
 }
 
 /**

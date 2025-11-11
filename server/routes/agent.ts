@@ -1,21 +1,21 @@
-import type { Request, Response, Router } from "express";
-import express from "express";
-import { z } from "zod";
+import type { Request, Response, Router } from 'express'
+import express from 'express'
+import { z } from 'zod'
 import type {
   AgentAnalyzeOptions,
   AgentAnalyzeResult,
   AgentDocument,
-} from "../../shared/agent-types";
-import { buildPrompt } from "../services/prompt";
-import { sendDashscope } from "../services/llm/dashscopeClient";
-import { extractPayload, normalizeAgentResult } from "../services/normalize";
+} from '../../shared/agent-types'
+import { buildPrompt } from '../services/prompt'
+import { sendDashscope } from '../services/llm/dashscopeClient'
+import { extractPayload, normalizeAgentResult } from '../services/normalize'
 
-export const agentRouter: Router = express.Router();
+export const agentRouter: Router = express.Router()
 
 const BodySchema = z.object({
   document: z.object({
-    kind: z.literal("text"),
-    content: z.string().min(1, "文档内容不能为空"),
+    kind: z.literal('text'),
+    content: z.string().min(1, '文档内容不能为空'),
     filename: z.string().optional(),
   }),
   options: z.object({
@@ -30,62 +30,49 @@ const BodySchema = z.object({
           example: z.string().optional(),
         })
       )
-      .min(1, "formSchema 不能为空"),
+      .min(1, 'formSchema 不能为空'),
     instructions: z.string().optional(),
     metadata: z.record(z.unknown()).optional(),
   }),
-});
+})
 
 // POST /api/agent/analyze
 agentRouter.post(
-  "/analyze",
-  async (
-    req: Request,
-    res: Response<AgentAnalyzeResult | { error: string; issues?: unknown }>
-  ) => {
-    const parsed = BodySchema.safeParse(req.body);
+  '/analyze',
+  async (req: Request, res: Response<AgentAnalyzeResult | { error: string; issues?: unknown }>) => {
+    const parsed = BodySchema.safeParse(req.body)
     if (!parsed.success) {
-      return res
-        .status(400)
-        .json({ error: "请求体格式不正确", issues: parsed.error.issues });
+      return res.status(400).json({ error: '请求体格式不正确', issues: parsed.error.issues })
     }
     const { document, options } = parsed.data as {
-      document: AgentDocument;
-      options: AgentAnalyzeOptions;
-    };
+      document: AgentDocument
+      options: AgentAnalyzeOptions
+    }
     try {
-      const prompt = buildPrompt(
-        document,
-        options.formSchema,
-        options.instructions
-      );
-      const data = await sendDashscope(prompt);
-      const content = data.choices?.[0]?.message?.content as
-        | string
-        | unknown[]
-        | undefined;
-      const payload = extractPayload(content);
-      const normalized = normalizeAgentResult(payload, options.formSchema);
-      res.json(normalized);
+      const prompt = buildPrompt(document, options.formSchema, options.instructions)
+      const data = await sendDashscope(prompt)
+      const content = data.choices?.[0]?.message?.content as string | unknown[] | undefined
+      const payload = extractPayload(content)
+      const normalized = normalizeAgentResult(payload, options.formSchema)
+      res.json(normalized)
     } catch (error) {
       // 识别超时/中断，返回 504，便于前端区分
       if (isAbortError(error)) {
-        return res.status(504).json({ error: "上游模型请求超时，请稍后重试" });
+        return res.status(504).json({ error: '上游模型请求超时，请稍后重试' })
       }
       res.status(500).json({
-        error: error instanceof Error ? error.message : "LLM 调用异常",
-      });
+        error: error instanceof Error ? error.message : 'LLM 调用异常',
+      })
     }
   }
-);
+)
 
-type AbortLikeError = { name?: unknown; message?: unknown };
+type AbortLikeError = { name?: unknown; message?: unknown }
 
 function isAbortError(err: unknown): boolean {
-  if (!err || typeof err !== "object") return false;
-  const candidate = err as AbortLikeError;
-  const name = typeof candidate.name === "string" ? candidate.name : "";
-  const message =
-    typeof candidate.message === "string" ? candidate.message : "";
-  return name === "AbortError" || /aborted|abort/i.test(message);
+  if (!err || typeof err !== 'object') return false
+  const candidate = err as AbortLikeError
+  const name = typeof candidate.name === 'string' ? candidate.name : ''
+  const message = typeof candidate.message === 'string' ? candidate.message : ''
+  return name === 'AbortError' || /aborted|abort/i.test(message)
 }

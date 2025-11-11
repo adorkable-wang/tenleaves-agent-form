@@ -1,11 +1,11 @@
-import type { TaskLog } from "../../hooks/useAssistantTasks";
+import type { TaskLog } from '../../hooks/useAssistantTasks'
 
 interface TaskListProps {
-  tasks: TaskLog[];
-  activeTaskId?: string | null;
-  activeElapsedMs?: number;
-  onSelectTask?: (task: TaskLog) => void;
-  onClear?: () => void;
+  tasks: TaskLog[]
+  activeTaskId?: string | null
+  activeElapsedMs?: number
+  onSelectTask?: (task: TaskLog) => void
+  onClear?: () => void
 }
 
 export function TaskList({
@@ -38,62 +38,50 @@ export function TaskList({
         ) : (
           tasks.map((task) => {
             const statusLabel =
-              task.status === "pending"
-                ? "进行中"
-                : task.status === "success"
-                ? "完成"
-                : "失败";
+              task.status === 'pending' ? '进行中' : task.status === 'success' ? '完成' : '失败'
             const statusColor =
-              task.status === "pending"
-                ? "bg-amber-100 text-amber-700 border-amber-200"
-                : task.status === "success"
-                ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-                : "bg-rose-100 text-rose-700 border-rose-200";
-            const isActive = activeTaskId === task.id;
+              task.status === 'pending'
+                ? 'bg-amber-100 text-amber-700 border-amber-200'
+                : task.status === 'success'
+                  ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                  : 'bg-rose-100 text-rose-700 border-rose-200'
+            const isActive = activeTaskId === task.id
             const durationMs =
-              task.status === "pending" && isActive
-                ? activeElapsedMs
-                : task.durationMs ?? 0;
+              task.status === 'pending' && isActive ? activeElapsedMs : (task.durationMs ?? 0)
             const durationLabel =
               durationMs > 0
                 ? `${(durationMs / 1000).toFixed(1)}s`
-                : task.status === "pending"
-                ? "进行中..."
-                : "—";
+                : task.status === 'pending'
+                  ? '进行中...'
+                  : '—'
             const progressPercent =
-              task.status === "pending"
+              task.status === 'pending'
                 ? 60
-                : task.status === "success"
-                ? 100
-                : task.status === "error"
-                ? 0
-                : 0;
+                : task.status === 'success'
+                  ? 100
+                  : task.status === 'error'
+                    ? 0
+                    : 0
             return (
               <article
                 key={task.id}
                 className={`space-y-2 rounded-xl border border-slate-200 bg-white/90 px-3 pt-2 pb-3 shadow-sm ${
-                  activeTaskId === task.id
-                    ? "ring-1 ring-indigo-400 shadow-indigo-200"
-                    : ""
+                  activeTaskId === task.id ? 'ring-1 ring-indigo-400 shadow-indigo-200' : ''
                 }`}
               >
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-2 text-left"
                   onClick={() => {
-                    if (task.result && onSelectTask) onSelectTask(task);
+                    if (task.result && onSelectTask) onSelectTask(task)
                   }}
                   disabled={!task.result}
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">
-                      {task.label}
-                    </p>
+                    <p className="truncate text-sm font-semibold text-slate-900">{task.label}</p>
                   </div>
                   <div className="text-right">
-                    <span className="mr-2 text-[11px] text-slate-500">
-                      {durationLabel}
-                    </span>
+                    <span className="mr-2 text-[11px] text-slate-500">{durationLabel}</span>
                     <span
                       className={`inline-flex items-center rounded-full border px-3 py-0.5 text-[11px] font-medium ${statusColor}`}
                     >
@@ -105,21 +93,21 @@ export function TaskList({
                   <div className="h-1 w-full overflow-hidden rounded-full bg-slate-200">
                     <div
                       className={`h-full transition-all duration-300 ${
-                        task.status === "error"
-                          ? "bg-gradient-to-r from-rose-400 to-rose-500"
-                          : "bg-gradient-to-r from-indigo-500 to-violet-500"
+                        task.status === 'error'
+                          ? 'bg-gradient-to-r from-rose-400 to-rose-500'
+                          : 'bg-gradient-to-r from-indigo-500 to-violet-500'
                       }`}
                       style={{ width: `${progressPercent}%` }}
                     />
                   </div>
                 </div>
               </article>
-            );
+            )
           })
         )}
       </div>
     </section>
-  );
+  )
 }
 
-export default TaskList;
+export default TaskList

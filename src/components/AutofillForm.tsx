@@ -64,7 +64,11 @@ export const AutofillForm: React.FC<Props> = ({
                 })}
               </div>
             ) : null}
-            {field.description && <span id={`${field.id}-hint`} className="field-hint">{field.description}</span>}
+            {field.description && (
+              <span id={`${field.id}-hint`} className="field-hint">
+                {field.description}
+              </span>
+            )}
           </div>
         )
       })}

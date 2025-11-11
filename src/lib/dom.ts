@@ -66,7 +66,8 @@ export function inferFormSchemaFromDOM(root: ParentNode = document): DomFormFiel
     if (tagName === 'INPUT' && inputType === 'hidden') continue // 隐藏字段跳过
 
     const idAttr = (el as HTMLElement).id || undefined // 元素 id
-    const name = (el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).name || undefined // name 属性
+    const name =
+      (el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).name || undefined // name 属性
     const domSelector = buildUniqueSelector(el) // 构建唯一选择器
     const stableId = getStableId({ name, idAttr, domSelector }) // 生成稳定 ID
 
@@ -74,12 +75,8 @@ export function inferFormSchemaFromDOM(root: ParentNode = document): DomFormFiel
     const placeholder = (el as HTMLInputElement | HTMLTextAreaElement).placeholder || undefined // 占位
     const describedByText = getAriaDescribedByText(el) || undefined // aria 描述
 
-    const required = !!(
-      (el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).required
-    )
-    const disabled = !!(
-      (el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).disabled
-    )
+    const required = !!(el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).required
+    const disabled = !!(el as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).disabled
     const multiple = (el as HTMLSelectElement).multiple ?? false // select 是否多选
 
     const options = extractOptions(el, inputType) // 可选项
@@ -269,16 +266,13 @@ function isInteractable(el: Element): boolean {
 }
 
 // 提取“最合理”的标签文本（按 for/最近 label/aria/placeholder/title 顺序）
-function getReadableLabel(
-  el: Element
-): { label?: string; source?: DomFormField['labelSource'] } {
+function getReadableLabel(el: Element): { label?: string; source?: DomFormField['labelSource'] } {
   const id = (el as HTMLElement).id
   if (id) {
     const byFor = el.ownerDocument?.querySelector<HTMLLabelElement>(
       `label[for="${CSS.escape(id)}"]`
     )
-    if (byFor?.textContent?.trim())
-      return { label: byFor.textContent.trim(), source: 'for' }
+    if (byFor?.textContent?.trim()) return { label: byFor.textContent.trim(), source: 'for' }
   }
   const closestLabel = el.closest('label')
   if (closestLabel?.textContent?.trim())
@@ -295,10 +289,7 @@ function getReadableLabel(
 // 根据 aria-describedby 引用，拼接描述文本
 function getAriaDescribedByText(el: Element): string {
   const ids =
-    (el as HTMLElement)
-      .getAttribute('aria-describedby')
-      ?.split(/\s+/)
-      .filter(Boolean) ?? []
+    (el as HTMLElement).getAttribute('aria-describedby')?.split(/\s+/).filter(Boolean) ?? []
   const texts = ids
     .map((id) => el.ownerDocument?.getElementById(id)?.textContent?.trim())
     .filter(Boolean) as string[]

@@ -7,7 +7,8 @@ export default defineConfig({
       entry: path.resolve(__dirname, 'src/lib/index.ts'),
       name: 'TenleavesAgentForm',
       formats: ['es', 'cjs'],
-      fileName: (format) => (format === 'es' ? 'tenleaves-agent-form.es.js' : 'tenleaves-agent-form.cjs'),
+      fileName: (format) =>
+        format === 'es' ? 'tenleaves-agent-form.es.js' : 'tenleaves-agent-form.cjs',
     },
     rollupOptions: {
       external: [
@@ -20,4 +21,3 @@ export default defineConfig({
     emptyOutDir: false,
   },
 })
-

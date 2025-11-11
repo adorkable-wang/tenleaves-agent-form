@@ -5,12 +5,7 @@
  * - 默认使用 RemoteAgentBackend（通过环境变量配置 endpoint 和 apiKey）。
  */
 import { RemoteAgentBackend, type RemoteAgentConfig } from './remoteAgent'
-import type {
-  AgentAnalyzeOptions,
-  AgentAnalyzeResult,
-  AgentBackend,
-  AgentDocument,
-} from './types'
+import type { AgentAnalyzeOptions, AgentAnalyzeResult, AgentBackend, AgentDocument } from './types'
 
 /**
  * AgentRunner
@@ -77,15 +72,5 @@ export function createRemoteAgentRunner(config: {
   return new AgentRunner(new RemoteAgentBackend(config))
 }
 
-export type {
-  AgentAnalyzeOptions,
-  AgentAnalyzeResult,
-  AgentBackend,
-  AgentDocument,
-} from './types'
-export type {
-  AgentFormField,
-  AgentFieldOption,
-  AgentFieldGroup,
-  AgentAction,
-} from './types'
+export type { AgentAnalyzeOptions, AgentAnalyzeResult, AgentBackend, AgentDocument } from './types'
+export type { AgentFormField, AgentFieldOption, AgentFieldGroup, AgentAction } from './types'

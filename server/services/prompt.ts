@@ -1,4 +1,4 @@
-import type { AgentDocument, AgentFormField } from "../../shared/agent-types";
+import type { AgentDocument, AgentFormField } from '../../shared/agent-types'
 
 /**
  * 构造提示词：
@@ -12,21 +12,17 @@ export function buildPrompt(
 ) {
   const fieldLines = fields
     .map((field) => {
-      const synonyms = field.synonyms?.length
-        ? `同义词: ${field.synonyms.join(", ")}.`
-        : "";
-      return `- ${field.label} (id: ${field.id}) ${synonyms} 说明: ${
-        field.description ?? "无"
-      }`;
+      const synonyms = field.synonyms?.length ? `同义词: ${field.synonyms.join(', ')}.` : ''
+      return `- ${field.label} (id: ${field.id}) ${synonyms} 说明: ${field.description ?? '无'}`
     })
-    .join("\n");
+    .join('\n')
 
   return `
 # 任务说明
 你是资深信息抽取助手，请根据给定的表单字段从用户文档中提取信息。若某字段无法确定，请返回 value: null，并在 rationale 中说明原因，禁止凭空杜撰。
 
 # 自定义补充
-${instructions ?? "无"}
+${instructions ?? '无'}
 
 # 表单字段
 ${fieldLines}
@@ -52,6 +48,5 @@ ${document.content}
 - 输出必须严格符合提供的 JSON Schema，禁止额外字段。
 - 禁止输出任何解释性自然语言或总结。
 - 禁止使用代码块围栏（如 \`\`\`json）。
-`;
-
+`
 }

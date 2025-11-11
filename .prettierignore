@@ -1,0 +1,7 @@
+dist
+dist-lib
+node_modules
+.pnpm-store
+.vscode
+docs/feature-status.json
+docs/feature-status.md

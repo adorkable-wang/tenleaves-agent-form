@@ -14,4 +14,7 @@ body {
     linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
 }
 
-#root { width: 100%; max-width: 1120px; }
+#root {
+  width: 100%;
+  max-width: 1120px;
+}

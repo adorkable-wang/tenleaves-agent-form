@@ -4,12 +4,7 @@
  * 作用：通过 HTTP 调用后端 /api/agent/analyze 接口，
  * 传入 { document, options }，得到标准化的 AgentAnalyzeResult。
  */
-import type {
-  AgentAnalyzeOptions,
-  AgentAnalyzeResult,
-  AgentBackend,
-  AgentDocument,
-} from './types'
+import type { AgentAnalyzeOptions, AgentAnalyzeResult, AgentBackend, AgentDocument } from './types'
 
 export interface RemoteAgentConfig {
   endpoint: string
@@ -50,9 +45,7 @@ export class RemoteAgentBackend implements AgentBackend {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '')
-      throw new Error(
-        `远程智能体调用失败：${response.status} ${response.statusText} ${errorText}`
-      )
+      throw new Error(`远程智能体调用失败：${response.status} ${response.statusText} ${errorText}`)
     }
 
     const result = (await response.json()) as AgentAnalyzeResult

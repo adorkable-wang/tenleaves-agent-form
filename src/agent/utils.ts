@@ -9,9 +9,7 @@ import type { AgentFieldGroup } from './types'
 export function emitAutofillEvent(values: Record<string, string>, backend: string): void {
   try {
     if (typeof document !== 'undefined') {
-      document.dispatchEvent(
-        new CustomEvent('agent:autofill', { detail: { values, backend } })
-      )
+      document.dispatchEvent(new CustomEvent('agent:autofill', { detail: { values, backend } }))
     }
   } catch {
     // 忽略事件派发失败
